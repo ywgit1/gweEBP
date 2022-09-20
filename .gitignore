@@ -3,7 +3,7 @@ __pycache__
 .idea
 data/
 demo/
-models/
+./models/
 *.pth
 *.tar
 output/
