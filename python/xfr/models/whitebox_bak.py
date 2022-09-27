@@ -180,13 +180,19 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
         self.fc_w = model_weights[-4]
         self.fc_b = model_weights[-3]
 
-    def restore_merged_layers(self):
+    def restore_emd_layer(self):
         from xfr.models.lightcnn import mfm
         self.net.fc = mfm(8*8*128, 256, type=0)
         self.net.fc.filter.weight = nn.Parameter(self.fc_w)
         self.net.fc.filter.bias = nn.Parameter(self.fc_b)
+        
+    # def restore_merged_layers(self):
+    #     from xfr.models.lightcnn import mfm
+    #     self.net.fc = mfm(8*8*128, 256, type=0)
+    #     self.net.fc.filter.weight = nn.Parameter(self.fc_w)
+    #     self.net.fc.filter.bias = nn.Parameter(self.fc_b)
     
-    def set_triplet_classifier(self, x_mate, x_nonmate):
+    def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
         """Replace classifier with binary mate and non-mate classifier, must be set prior to first call to forward for callbacks to be set properly"""
         self.net.fc2 = nn.Linear(256, 2, bias=False)
         self.net.fc2.weight = nn.Parameter(torch.cat((x_mate, x_nonmate), dim=0))

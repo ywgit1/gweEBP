@@ -114,18 +114,86 @@ def run_contrastive_triplet_ebp(wb, im_mates, im_nonmates, probe_im,
     y = y.detach().cpu().numpy()
     assert np.all(y[:, 0] > y[:, 1])
     
+    k_mwp = -2
+    if 'LightCNN9' in str(wb.net):
+        k_mwp = 10
+    elif 'VGG16' in str(wb.net):
+        k_mwp = 8
+        
     if truncate_percent is None:
-        img_saliency = wb.contrastive_e2bp(
-            img_probe, k_poschannel=0, k_negchannel=1)
+        img_saliency = wb.contrastive_ebp(
+            img_probe, k_poschannel=0, k_negchannel=1, k_mwp=k_mwp)
     else:
         img_saliency = wb.truncated_contrastive_ebp(
             img_probe, k_poschannel=0, k_negchannel=1,
-            percentile=truncate_percent)
+            percentile=truncate_percent, k_mwp=k_mwp)
 
     # print("Returning Contrastive EBP")
     return img_saliency
 
+def run_contrastive_triplet_eebp(wb, im_mates, im_nonmates, probe_im,
+                                net_name,
+                                ebp_version,
+                                truncate_percent,
+                                device,
+                                # merge_layers=True
+                       ):
+    """ Contrastive excitation backprop"""
 
+    x_mates = []
+    wb.net.restore_emd_layer() # Restore the original embedding layer
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    # print("Calling Contrastive EBP on img_probe")
+    
+    x_probe = wb.net.encode(img_probe) # Set net.fc.indicator properly
+    
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate,
+                                  avg_x_nonmate)
+    # Add hooks to the embedding layer and triplet classification layer!
+    hooks = []    
+    hooks.append(wb.net.net.fc.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc), 'hooks': hooks})
+    hooks = []
+    hooks.append(wb.net.net.fc2.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc2.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc2), 'hooks': hooks})
+    
+    # Verify if the probe is classified as the mate
+    y = wb.net.classify(img_probe)
+    y = y.detach().cpu().numpy()
+    assert np.all(y[:, 0] > y[:, 1])
+    
+    K = None
+    k_mwp = -2
+    if 'LightCNN9' in str(wb.net):
+        K = 12
+        k_mwp = 10
+    elif 'VGG16' in str(wb.net):
+        K = 9
+        k_mwp = 8
+    if truncate_percent is None:
+        img_saliency = wb.contrastive_eebp(
+            img_probe, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
+    else:
+        img_saliency = wb.truncated_contrastive_eebp(
+            img_probe, k_poschannel=0, k_negchannel=1,
+            percentile=truncate_percent, K=K, k_mwp=k_mwp)
+
+    # print("Returning Contrastive EBP")
+    return img_saliency
 
 def run_weighted_subtree_triplet_ebp(
     wb, im_mates, im_nonmates, probe_im,
@@ -252,14 +320,72 @@ def triplet_ebp(wb, im_mates, im_nonmates, probe_im, net_name, ebp_version, devi
     
     
     x_probe = wb.convert_from_numpy(probe_im).to(device)
-
+    k_mwp = -2
+    if 'LightCNN9' in str(wb.net):
+        k_mwp = 10
+    elif 'VGG16' in str(wb.net):
+        k_mwp = 8
     # Generate Excitation backprop (EBP) saliency map at first convolutional layer
     # P = torch.ones( (1, wb.net.num_classes()) )
     P = torch.zeros((1, 2))
-    P[0] = 1.0
+    P[0][0] = 1.0
     P = P.to(device)
     wb._ebp_mode2 = 'pm' # probe is matched to mate
-    img_saliency = wb.ebp(x_probe, P)
+    img_saliency = wb.ebp(x_probe, P, k_mwp=k_mwp)
+    return img_saliency
+
+
+def triplet_eebp(wb, im_mates, im_nonmates, probe_im, net_name, ebp_version, device):
+    wb.net.restore_emd_layer() # Restore the original embedding layer
+    
+    x_mates = []    
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+    
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    x_probe = wb.net.encode(img_probe) # Set net.fc.indicator properly
+
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
+    # Add hooks to the embedding layer and triplet classification layer!
+    hooks = []    
+    hooks.append(wb.net.net.fc.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc), 'hooks': hooks})
+    hooks = []
+    hooks.append(wb.net.net.fc2.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc2.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc2), 'hooks': hooks})
+    
+    # Verify if the probe is classified as the mate
+    y = wb.net.classify(img_probe)
+    y = y.detach().cpu().numpy()
+    assert np.all(y[:, 0] > y[:, 1])
+    
+    
+    x_probe = wb.convert_from_numpy(probe_im).to(device)
+    K = None
+    k_mwp = -2
+    if 'LightCNN9' in str(wb.net):
+        K = 12
+        k_mwp = 10
+    elif 'VGG16' in str(wb.net):
+        K = 9
+        k_mwp = 8
+    # Generate Excitation backprop (EBP) saliency map at first convolutional layer
+    # P = torch.ones( (1, wb.net.num_classes()) )
+    P = torch.zeros((1, 2))
+    P[0][0] = 1.0
+    P = P.to(device)
+    img_saliency = wb.eebp(x_probe, P, K=K, k_mwp=k_mwp)
     return img_saliency
 
 def shorten_subtree_mode(ebp_subtree_mode):
@@ -385,9 +511,36 @@ def generate_wb_smaps(
                 mask_id=mask_id,
             )
 
+        if method is None or method=='EEBP':
+            result_calculated = True
+            fn = '%s_mode=%s_v%02d_%s' % (
+                method,
+                shorten_subtree_mode(wb.ebp_subtree_mode()),
+                ebp_ver,
+                device.type,
+            )
+            create_save_smap(
+                fn,
+                output_dir, overwrite,
+                smap_fn=lambda: triplet_eebp(
+                    wb=wb,
+                    im_mates=im_mates,
+                    im_nonmates=im_nonmates,                    
+                    probe_im=probe_im,
+                    net_name=net_name,
+                    ebp_version=ebp_ver,
+                    device=device,
+                    # merge_layers=merge_layers
+                ),
+                probe_im=probe_im,
+                probe_info=probe_row,
+                mask_im=mask_im,
+                mask_id=mask_id,
+            )
+            
         if method is None or 'contrastive' in method:
             result_calculated = True
-            for (truncate_percent) in [None]:#, 20]:
+            for (truncate_percent) in [None, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
                     fn = '%s_triplet_ebp_mode=%s_v%02d_%s' % (
@@ -461,6 +614,47 @@ def generate_wb_smaps(
                         mask_im=mask_im,
                         mask_id=mask_id,
                     )
+                    
+        if method is None or 'cEEBP' in method:
+            result_calculated = True
+            for (truncate_percent) in [None, 20]:
+                if truncate_percent is None:
+                    # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
+                    fn = '%s_mode=%s_v%02d_%s' % (
+                        method,
+                        shorten_subtree_mode(wb.ebp_subtree_mode()),
+                        ebp_ver,
+                        device.type,
+                    )
+                    # fn = 'low_res_cebp'
+                else:
+                    # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
+                    fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
+                        method,
+                        shorten_subtree_mode(wb.ebp_subtree_mode()),
+                        ebp_ver,
+                        truncate_percent,
+                        device.type,
+                    )
+                create_save_smap(
+                    fn,
+                    output_dir, overwrite,
+                    smap_fn=lambda: run_contrastive_triplet_eebp(
+                        wb=wb,
+                        im_mates=im_mates,
+                        im_nonmates=im_nonmates,
+                        probe_im=probe_im,
+                        truncate_percent=truncate_percent,
+                        net_name=net_name,
+                        ebp_version=ebp_ver,
+                        device=device
+                    ),
+                    probe_im=probe_im,
+                    probe_info=probe_row,
+                    mask_im=mask_im,
+                    mask_id=mask_id,
+                )
+                        
         if not result_calculated:
             raise RuntimeError(
                 "Unknown method type %s (valid types: 'meanEBP', "

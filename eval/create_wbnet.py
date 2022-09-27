@@ -3,7 +3,7 @@ import torch
 import sys
 import xfr
 from xfr import xfr_root
-from xfr.models import whitebox_ext as whitebox
+from xfr.models import whitebox_ext as whitebox 
 from xfr.models import resnet
 import warnings
 

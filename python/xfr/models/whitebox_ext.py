@@ -309,6 +309,37 @@ class WhiteboxVGG16(WhiteboxNetwork):
     #         self.net.fc2 = nn.Identity(2)
     #         # </editor-fold>
     
+    # def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
+    #     # <editor-fold desc="[+] Original implementation ..."> # not merge layer
+    #     self.indicator_pm = (x_probe * x_mate > 0).detach()
+    #     self.indicator_p_neg = (x_probe < 0).detach()
+    #     self.indicator_p_pos = torch.logical_not(self.indicator_p_neg)
+    #     self.indicator_pm_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pm)
+    #     self.indicator_pn = (x_probe * x_nonmate > 0).detach()
+    #     self.indicator_pn_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pn)
+        
+    #     self.net.fc2 = nn.Linear(1024, 2, bias=False)
+    #     self.net.fc2.weight.data.copy_(torch.cat( (x_mate, x_nonmate), dim=0) / self.net.emd_norm)
+        
+    #     x_mate_ = torch.zeros_like(x_mate)
+    #     x_mate_[self.indicator_pm] = torch.abs(x_mate[self.indicator_pm])
+    #     self.net.fc2.pm_pos_weight = torch.cat((x_mate_, x_nonmate), dim=0).detach() / self.net.emd_norm
+    #     x_nonmate_ = torch.zeros_like(x_nonmate)
+    #     x_nonmate_[self.indicator_pn] = torch.abs(x_nonmate[self.indicator_pn])
+    #     self.net.fc2.pn_pos_weight = torch.cat((x_mate, x_nonmate_), dim=0).detach() / self.net.emd_norm
+    #     self.net.fc2.reverse_act_sign = True
+    #     # </editor-fold>
+        
+    #     fc_weight = self.net.fc.weight.data
+    #     pm_pos_weight = torch.zeros_like(fc_weight)
+    #     pm_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
+    #     pm_pos_weight[self.indicator_pm_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pm_flip.view(-1)])
+    #     self.net.fc.pm_pos_weight = pm_pos_weight
+    #     pn_pos_weight = torch.zeros_like(fc_weight)
+    #     pn_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
+    #     pn_pos_weight[self.indicator_pn_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pn_flip.view(-1)])
+    #     self.net.fc.pn_pos_weight = pn_pos_weight
+        
     def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
         # <editor-fold desc="[+] Original implementation ..."> # not merge layer
         
@@ -519,6 +550,33 @@ class Whitebox(nn.Module):
                 module.bias.data.copy_(module.orig_bias.data)  # Restore original bias
                 module.orig_bias = None
             return None
+
+        elif self._ebp_mode == 'positive_activation':
+            assert(len(self.A) > 0)  # must have called activation first
+            #print(str(module))
+            if hasattr(module, 'weight'):
+                module.orig_weight = module.weight.detach().clone()
+                if hasattr(module, 'pm_pos_weight'):
+                    if self._ebp_mode2 == 'pm':
+                        module.weight.data.copy_(module.pm_pos_weight.data)
+                    elif self._ebp_mode2 == 'pn':
+                        module.weight.data.copy_(module.pn_pos_weight.data)
+                else:
+                    module.pos_weight = F.relu(module.orig_weight.data) # W_{+}
+                    module.weight.data.copy_( module.pos_weight.data )  # module backwards is on positive weights
+            if hasattr(module, 'bias') and module.bias is not None:
+                module.orig_bias = module.bias.detach().clone()
+                module.bias.data.zero_() # The original bias should not take part in the EBP process
+            # if self._ebp_with_bias and hasattr(module, 'bias') and module.bias is not None:
+            #     module.orig_bias = module.bias.detach().clone()
+            #     module.pos_bias = F.relu(module.orig_bias.data)
+            #     module.bias.data.copy_( module.pos_bias.data )
+            
+            # Save layerwise positive activations (self.X = W^{+T}*A) in recursive layer visitor order
+            self.X.append(tuple([F.relu(x).detach().clone() for x in x_input]))
+            A = self.posA.pop(0)  # override forward input -> activation (A)
+            self.posA.append(A) # Reappend for EBP
+            return A # Replace the input with the non-negative activation
         
         elif self._ebp_mode == 'pos_act_pos_weight':
             assert(len(self.posA) > 0)  # must have called activation first
@@ -598,8 +656,8 @@ class Whitebox(nn.Module):
             self.negA.append(negA) # Reappend for EBP
             return negA # Replace the input with the negative activation              
             
-        elif self._ebp_mode in ['ebp', 'e2bp']:
-            assert(len(self.X) > 0 and len(self.A) > 0 and len(self.X)==len(self.A))  # must have called forward in activation and positive_activation mode first
+        elif self._ebp_mode in ['ebp', 'eebp']:
+            assert(len(self.X) > 0 and len(self.posA) > 0 and len(self.X)==len(self.posA))  # must have called forward in activation and positive_activation mode first
             if hasattr(module, 'orig_weight') and module.orig_weight is not None:
                 module.weight.data.copy_(module.orig_weight.data)  # restore weight
                 module.orig_weight = None
@@ -635,11 +693,30 @@ class Whitebox(nn.Module):
 
                 x.register_hook(_savegrad)  # tensor hook to call _savegrad
 
-            #self.A.append(tuple([F.relu(x.detach().clone()) for x in x_input]))  # save non-negative layer activation on forward
+            # if hasattr(module, 'reverse_act_sign'): # Flip the sign of negative activations which have positive contribution to the cosine similarity
+            #     def reverse_sign(x):
+            #         x_ = x.detach().clone()
+            #         if self._ebp_mode2 == 'pm': # probe to mate
+            #             mask = self.net.indicator_pm_flip[0]
+            #             x_[:, mask] = -x_[:, mask]
+            #         elif self._ebp_mode2 == 'pn': # probe to non-mate
+            #             x_[:, self.net.indicator_pn_flip[0]] = -x_[:, self.net.indicator_pn_flip[0]]
+            #         return x_
+            #     if module.reverse_act_sign == True:
+            #         self.A.append(tuple([F.relu(reverse_sign(x)) for x in x_input]))
+            #     else:
+            #         self.A.append(tuple([F.relu(x.detach().clone()) for x in x_input]))
+            # else:
+            #     self.A.append(tuple([F.relu(x.detach().clone()) for x in x_input]))  # save non-negative layer activation on forward
+            # return None  # no change to forward output
+
             self.A.append(tuple([x.detach().clone() for x in x_input]))
             self.posA.append(tuple([F.relu(x.detach().clone()) for x in x_input]))
-            self.negA.append(tuple([-F.relu(-1 * x.detach().clone()) for x in x_input]))
+            self.negA.append(tuple([-F.relu(-1 * x).detach().clone() for x in x_input]))
             return None  # no change to forward output
+        
+        elif self._ebp_mode == 'positive_activation':
+            return None
         
         elif self._ebp_mode == 'pos_act_pos_weight' or self._ebp_mode == 'pos_act_neg_weight' or \
             self._ebp_mode == 'neg_act_pos_weight' or self._ebp_mode == 'neg_act_neg_weight':
@@ -647,7 +724,7 @@ class Whitebox(nn.Module):
 
         elif self._ebp_mode == 'ebp':
             # Excitation backprop: https://arxiv.org/pdf/1608.00507.pdf, Algorithm 1, pg 9
-            A = self.A.pop(0)  # A_{n}: An input, pre-computed in "activation" mode
+            A = self.posA.pop(0)  # A_{n}: An input, pre-computed in "activation" mode
             X = self.X.pop(0)  # X_{n} = W^{+T}A_{n+1}, (Alg. 1, step 2), pre-computed in "positive activation" mode
 
             # Affine layers only
@@ -680,10 +757,7 @@ class Whitebox(nn.Module):
                     # Implement equation 10 (algorithm 1)
                     zh = F.relu(z) # Z is back-propagated from the input tensor of the n-th layer to the (n-1)-th layer
                     p = torch.mul(a, zh)  # step 5, closure (a): MWP for this layer: P_{n} = A_{n} * Z
-                    p_prior = None
-                    if len(self.P_prior) > 0:
-                        p_prior = self.P_prior.pop(0)
-                    
+                    p_prior = self.P_prior.pop(0) if len(self.P_prior) > 0 else None
                     if p_prior is not None:
                         p.data.copy_(p_prior)  # override with prior
                     self.P_layername.append(str(module))  # MWP layer, closure (self.P_layername)
@@ -729,9 +803,9 @@ class Whitebox(nn.Module):
                         raise ValueError('Invalid subtree mode "%s"' % self._ebp_subtree_mode)
 
                 g.register_hook(_backward_ebp)
-            return None            
+            return None
             
-        elif self._ebp_mode == 'e2bp':
+        elif self._ebp_mode == 'eebp':
             # Excitation backprop: https://arxiv.org/pdf/1608.00507.pdf, Algorithm 1, pg 9
             A = self.A.pop(0)  # A_{n}: An input, pre-computed in "activation" mode
             self.A.append(A)
@@ -768,7 +842,7 @@ class Whitebox(nn.Module):
             for (g, a, pa, na, x_pp, x_pn, x_np, x_nn) in zip(x_input, A, posA, negA, X, X_pn, X_np, X_nn):
                 assert (g.shape == a.shape and g.shape == x_pp.shape)
 
-                def _backward_e2bp(z): # Backward hook for input tensors
+                def _backward_eebp(z): # Backward hook for input tensors
                     # Tensor hooks are broken but "it's a feature", need operations in same scope to avoid memory leak
                     #   https://discuss.pytorch.org/t/memory-leak-when-using-forward-hook-and-backward-hook-simultaneously/27555
                     #   https://github.com/pytorch/pytorch/issues/12863
@@ -797,7 +871,7 @@ class Whitebox(nn.Module):
                     self.P.append(p)  # marginal winning probability, closure (self.P)
 
                     # Prepare Y = P / X for the next/bottom layer
-                    if self._ebp_ext_mode in ['pos_act_pos_weight', 'neg_act_neg_weight']:
+                    if self._ebp_ext_mode in ['pos_act_pos_weight']:
                         # if 'Linear' in str(module) and 'in_features=256' in str(module): # debug 
                         #     x = x_pp# + x_nn # x > 0
                         # else:
@@ -805,7 +879,11 @@ class Whitebox(nn.Module):
                         #assert(torch.sum(x < 0) == 0)
                         x = x + self.eps
                         p_ = torch.mul(p, a > 0) # P(A^{+})
-                    elif self._ebp_ext_mode in ['pos_act_neg_weight', 'neg_act_pos_weight']:
+                    elif self._ebp_ext_mode in ['neg_act_neg_weight']:
+                        x = x_nn + x_pp
+                        x = x + self.eps
+                        p_ = torch.mul(p, a > 0)
+                    elif self._ebp_ext_mode in ['pos_act_neg_weight']:#, 'neg_act_pos_weight']:
                         # if 'Linear' in str(module):#debug
                         #     x = x_pn # + x_np # x < 0
                         # else:
@@ -813,13 +891,18 @@ class Whitebox(nn.Module):
                         #assert(torch.sum(x > 0) == 0)
                         x = x - self.eps
                         p_ = torch.mul(p, a < 0) # P(A^{-})
+                    elif self._ebp_ext_mode in ['neg_act_pos_weight']:
+                        x = x_np + x_pn
+                        x = x - self.eps
+                        p_ = torch.mul(p, a < 0)
                     else:
                         raise ValueError('Unknown ebp_ext_mode %s' % self._ebp_ext_mode)
                         
                     # Subtree EBP modes (for analysis purposes)
                     if self._ebp_subtree_mode == 'affineonly':
                         # This mode sucks
-                        if 'Conv' in str(module) or 'Linear' in str(module) or 'AvgPool' in str(module) or 'BatchNorm' in str(module):
+                        if 'Conv' in str(module) or 'Linear' in str(module) or \
+                            'AvgPool' in str(module) or 'BatchNorm' in str(module):
                             y = torch.div(p_, x)  # step 3, closure (x): Y = P^{+/-}_{n} / (W^{+/-T} * A^{+/-}_{n+1}) for calculating MWP for the (n+1)-th layer
                             return y  # step 4: Y in (Z=W^{+}*Y) resulted from next (bottom) layer call to _backward_ebp, input to this lambda is Z
                         # elif 'Sigmoid' in str(module) or 'ELU' in str(module) or 'Tanh' in str(module):
@@ -830,7 +913,7 @@ class Whitebox(nn.Module):
                     else:
                         raise ValueError('Invalid subtree mode "%s"' % self._ebp_subtree_mode)
 
-                g.register_hook(_backward_e2bp)
+                g.register_hook(_backward_eebp)
             return None
         
         elif self._ebp_mode == 'disable':
@@ -880,37 +963,82 @@ class Whitebox(nn.Module):
         (self.posA, self.negA, self.X_np, self.X_pn, self.X_nn) = ([], [], [], [], [])
         self.net.clear()
 
-    def contrastive_e2bp(self, img_probe, k_poschannel, k_negchannel):
+    def contrastive_eebp(self, img_probe, k_poschannel, k_negchannel, K=None, k_mwp=-2):
         assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
         assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())
 
-        K = None
-        if 'LightCNN9' in str(self.net):
-            K = 12
-        elif 'VGG16' in str(self.net):
-            K = 9
-        
+        # K = None
+        # if 'LightCNN9' in str(self.net):
+        #     K = 12
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     K = 9
+        #     k_mwp = -1
+            
         # Mated EBP
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
-        self.e2bp(img_probe, P0, mwp=False, K=K)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
         P_mate = self.P
 
         # Non-mated EBP
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
-        self.e2bp(img_probe, P0, mwp=False, K=K)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
         P_nonmate = self.P
         
         # Contrastive EBP
-        mwp_mate = P_mate[-1] / torch.sum(P_mate[-1]) 
-        mwp_nonmate = P_nonmate[-1] / torch.sum(P_nonmate[-1]) 
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp]) 
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp]) 
         mwp_contrastive = np.squeeze(np.sum(F.relu(mwp_mate - mwp_nonmate).detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
         mwp_contrastive = np.array(PIL.Image.fromarray(mwp_contrastive).resize((img_probe.shape[3], img_probe.shape[2])))
         return self._mwp_to_saliency(mwp_contrastive)                                                                                                                                                     
     
+
+    def truncated_contrastive_eebp(self, img_probe, k_poschannel, k_negchannel, percentile=20, K=None, k_mwp=-2):
+        """Truncated contrastive excitation backprop"""
+        assert (k_poschannel >= 0 and k_poschannel < self.net.num_classes())
+        assert (k_negchannel >= 0 and k_negchannel < self.net.num_classes())
+
+        # K = None
+        # if 'LightCNN9' in str(self.net):
+        #     K = 12
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     K = 9
+        #     k_mwp = -1
+            
+        # Mated EBP
+        P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
+        P0 = P0.to(img_probe.device)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
+        P_mate = self.P
+
+        # Non-mated EBP
+        P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
+        P0 = P0.to(img_probe.device)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
+        P_nonmate = self.P
+
+        # Truncated contrastive EBP
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        (mwp_sorted, mwp_sorted_indices) = torch.sort(torch.flatten(mwp_mate.clone()))  # ascending
+        mwp_sorted_cumsum = torch.cumsum(mwp_sorted, 0)  # for percentile
+        percentile_mask = torch.zeros(mwp_sorted.shape)
+        percentile_mask[mwp_sorted_indices] = (mwp_sorted_cumsum >= (percentile / 100.0) * mwp_sorted_cumsum[-1]).type(torch.FloatTensor)
+        percentile_mask = percentile_mask.reshape(mwp_mate.shape)
+        percentile_mask = percentile_mask.to(img_probe.device)
+        mwp_mate = torch.mul(percentile_mask, mwp_mate)        
+        mwp_nonmate = torch.mul(percentile_mask, mwp_nonmate)
+        mwp_mate = mwp_mate / torch.sum(mwp_mate)# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = mwp_nonmate / torch.sum(mwp_nonmate)# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer        
+        tcebp = F.relu(mwp_mate - mwp_nonmate)
+        mwp_truncated_contrastive = np.squeeze(np.sum(tcebp.detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
+        return self._mwp_to_saliency(mwp_truncated_contrastive)
+
     
-    def e2bp(self, x, Pn, mwp=False, K=None):
+    def eebp(self, x, Pn, mwp=False, K=None, k_mwp=-2):
         """Excitation backprop: forward operation to compute activations (An, Xn) and backward to compute Pn following equation (10)"""
 
         # Pre-processing
@@ -924,30 +1052,38 @@ class Whitebox(nn.Module):
         assert np.all(y[:, 0] > y[:, 1])
         
         self._ebp_mode = 'pos_act_pos_weight' 
-        _ = self.net.classify(x.requires_grad_(True)) # Get W^{+}. Generate X^{+}_{1} for each layer in a forward pass as: X = W^{+T} * A^{+}_{n}
+        _ = self.net.classify(x) # Get W^{+}. Generate X^{+}_{1} for each layer in a forward pass as: X = W^{+T} * A^{+}_{n}
         self._ebp_mode = 'neg_act_pos_weight' 
-        _ = self.net.classify(x.requires_grad_(True)) # Get W^{+}. Generate X^{-}_{1} for each layer in a forward pass as: X = W^{+T} * A^{-}_{n}
+        _ = self.net.classify(x) # Get W^{+}. Generate X^{-}_{1} for each layer in a forward pass as: X = W^{+T} * A^{-}_{n}
         self._ebp_mode = 'pos_act_neg_weight' 
-        _ = self.net.classify(x.requires_grad_(True)) # Get W^{-}. Generate X^{-}_{2} for each layer in a forward pass as: X = W^{-T} * A^{+}_{n}
+        _ = self.net.classify(x) # Get W^{-}. Generate X^{-}_{2} for each layer in a forward pass as: X = W^{-T} * A^{+}_{n}
         self._ebp_mode = 'neg_act_neg_weight' 
-        _ = self.net.classify(x.requires_grad_(True)) # Get W^{-}. Generate X^{+}_{2} for each layer in a forward pass as: X = W^{-T} * A^{-}_{n} 
+        _ = self.net.classify(x) # Get W^{-}. Generate X^{+}_{2} for each layer in a forward pass as: X = W^{-T} * A^{-}_{n} 
 
+        # K = None
+        # if 'LightCNN9' in str(self.net):
+        #     K = 12
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     K = 9
+        #     k_mwp = -1
+            
         # E2BP
-        self._ebp_mode = 'e2bp'
+        self._ebp_mode = 'eebp'
         self._ebp_ext_mode = 'pos_act_pos_weight'
         self.P_layername, self.P = [], []
-        Xn = self.net.classify(x.requires_grad_(True))
+        Xn = self.net.classify(x)
         Xn.backward(Pn, retain_graph=False) # In a backward pass, generate MWP P_{n} = A_{n} * Z
         if K is None: K = len(self.P_layername)
         
         P = []
-        p_0, _ = self.layerwise_e2bp(x, 0, K, None, Pn) 
+        p_0, _ = self.layerwise_eebp(x, 0, K, None, Pn) 
         P.append(p_0)
         p_prior = p_0
         k = 0
         
         while k < K:
-            p_next, k_next = self.layerwise_e2bp(x, k, K, p_prior, Pn)
+            p_next, k_next = self.layerwise_eebp(x, k, K, p_prior, Pn)
             if p_next is not None:
                 assert(len(p_next) > 0)
                 for p in p_next: P.append(p)
@@ -958,7 +1094,7 @@ class Whitebox(nn.Module):
         
         self.P = P
         
-        P = np.squeeze(np.sum(P[-2].detach().cpu().numpy(), axis=1)).astype(np.float32)  # pool over channels
+        P = np.squeeze(np.sum(P[k_mwp].detach().cpu().numpy(), axis=1)).astype(np.float32)  # pool over channels
         self._ebp_mode = 'disable'
         
         # P = np.array(PIL.Image.fromarray(P).resize((224, 224)))
@@ -967,7 +1103,7 @@ class Whitebox(nn.Module):
         P = self._mwp_to_saliency(P) if not mwp else P
         return P
     
-    def layerwise_e2bp(self, x, k_layer, K, p_prior, Pn):
+    def layerwise_eebp(self, x, k_layer, K, p_prior, Pn):
         """Layerwise excitation backprop for extended EBP"""
         """For a given layer, set a prior and back propagate from there"""
         # assert (k_poschannel >= 0 and k_poschannel < self.net.num_classes())
@@ -987,7 +1123,7 @@ class Whitebox(nn.Module):
         
         P_ret = None
         if k_ret < K:
-            self._ebp_mode = 'e2bp'
+            self._ebp_mode = 'eebp'
             self._ebp_ext_mode = 'pos_act_pos_weight'
             self.P_layername, self.P = [], []
             self.P_prior = [None for x in range(K)]  # all other layers propagate
@@ -1002,7 +1138,7 @@ class Whitebox(nn.Module):
             self.P_layername, self.P = [], []
             self.P_prior = [None for x in range(K)]  # all other layers propagate
             self.P_prior[k_layer] = p_prior
-            Xn = self.net.classify(x.requires_grad_(True))
+            Xn = self.net.classify(x)
             self.net.net.zero_grad()
             Xn.backward(Pn, retain_graph=False) # In a backward pass, generate MWP P_{n} = A_{n} * Z
             P_ret = [P_ret[kk - k_layer - 1] + self.P[kk] for kk in range(k_layer + 1, k_ret + 1)] if p_prior is not None else P_ret + self.P[k_ret]
@@ -1011,17 +1147,17 @@ class Whitebox(nn.Module):
             self.P_layername, self.P = [], []
             self.P_prior = [None for x in range(K)]  # all other layers propagate
             self.P_prior[k_layer] = p_prior
-            Xn = self.net.classify(x.requires_grad_(True))
+            Xn = self.net.classify(x)
             self.net.net.zero_grad()
             Xn.backward(Pn, retain_graph=False) # In a backward pass, generate MWP P_{n} = A_{n} * Z
             P_ret = [P_ret[kk - k_layer - 1] + self.P[kk] for kk in range(k_layer + 1, k_ret + 1)] if p_prior is not None else P_ret + self.P[k_ret]
             
-            # if k_ret == 0:
+        # if k_ret == 0:
             self._ebp_ext_mode = 'neg_act_neg_weight'
             self.P_layername, self.P = [], []
             self.P_prior = [None for x in range(K)]  # all other layers propagate
             self.P_prior[k_layer] = p_prior
-            Xn = self.net.classify(x.requires_grad_(True))
+            Xn = self.net.classify(x)
             self.net.net.zero_grad()
             Xn.backward(Pn, retain_graph=False) # In a backward pass, generate MWP P_{n} = A_{n} * Z
             P_ret = [P_ret[kk - k_layer - 1] + self.P[kk] for kk in range(k_layer + 1, k_ret + 1)] if p_prior is not None else P_ret + self.P[k_ret]
@@ -1031,12 +1167,13 @@ class Whitebox(nn.Module):
         return P_ret, k_ret
     
     
-    def ebp(self, x, Pn, mwp=False):
+    def ebp(self, x, Pn, mwp=False, k_mwp=-2):
         """Excitation backprop: forward operation to compute activations (An, Xn) and backward to compute Pn following equation (10)"""
 
         # Pre-processing
         x = x.detach().clone()  # if we do not clone, then the backward graph grows
         self._clear()  # if we do do not clear, then forward will accumulate self.A and self.dA
+        gc.collect()
 
         # Forward activations
         self._ebp_mode = 'activation'
@@ -1047,10 +1184,15 @@ class Whitebox(nn.Module):
         _ = self.net.classify(x.requires_grad_(True)) # Get W^{+}. Generate X for each layer in a forward pass as: X = W^{*T} * A_{n}
 
         # EBP
+        # if 'LightCNN9' in str(self.net):
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     k_mwp = 8
+            
         self._ebp_mode = 'ebp'
         Xn = self.net.classify(x.requires_grad_(True))
         Xn.backward(Pn, retain_graph=True) # In a backward pass, generate MWP P_{n} = A_{n} * Z
-        P = np.squeeze(np.sum(self.P[-2].detach().cpu().numpy(), axis=1)).astype(np.float32)  # pool over channels
+        P = np.squeeze(np.sum(self.P[k_mwp].detach().cpu().numpy(), axis=1)).astype(np.float32)  # pool over channels
         self._ebp_mode = 'disable'
         
         # P = np.array(PIL.Image.fromarray(P).resize((224, 224)))
@@ -1059,7 +1201,7 @@ class Whitebox(nn.Module):
         P = self._mwp_to_saliency(P) if not mwp else P
         return P
 
-    def contrastive_ebp(self, img_probe, k_poschannel, k_negchannel):
+    def contrastive_ebp(self, img_probe, k_poschannel, k_negchannel, k_mwp=-2):
         """Contrastive excitation backprop"""
         assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
         assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())
@@ -1068,25 +1210,29 @@ class Whitebox(nn.Module):
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pm' # probe is matched to mate
-        self.ebp(img_probe, P0)
+        self.ebp(img_probe, P0, k_mwp)
         P_mate = self.P
 
         # Non-mated EBP
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pn' # probe is matched to non-mate
-        self.ebp(img_probe, P0)
+        self.ebp(img_probe, P0, k_mwp)
         P_nonmate = self.P
         
         # Contrastive EBP
+        # if 'LightCNN9' in str(self.net):
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     k_mwp = 8
         self._ebp_mode2 = None
-        mwp_mate = P_mate[4] / torch.sum(P_mate[4]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
-        mwp_nonmate = P_nonmate[2] / torch.sum(P_nonmate[2]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
         mwp_contrastive = np.squeeze(np.sum(F.relu(mwp_mate - mwp_nonmate).detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
         mwp_contrastive = np.array(PIL.Image.fromarray(mwp_contrastive).resize((img_probe.shape[3], img_probe.shape[2])))
         return self._mwp_to_saliency(mwp_contrastive)
 
-    def truncated_contrastive_ebp(self, img_probe, k_poschannel, k_negchannel, percentile=20):
+    def truncated_contrastive_ebp(self, img_probe, k_poschannel, k_negchannel, percentile=20, k_mwp=-2):
         """Truncated contrastive excitation backprop"""
         assert (k_poschannel >= 0 and k_poschannel < self.net.num_classes())
         assert (k_negchannel >= 0 and k_negchannel < self.net.num_classes())
@@ -1096,7 +1242,7 @@ class Whitebox(nn.Module):
         P0[0][k_poschannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pm'
-        self.ebp(img_probe, P0)
+        self.ebp(img_probe, P0, k_mwp)
         P_mate = self.P
 
         # Non-mated EBP
@@ -1104,12 +1250,16 @@ class Whitebox(nn.Module):
         P0[0][k_negchannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pn'
-        self.ebp(img_probe, P0)
+        self.ebp(img_probe, P0, k_mwp)
         P_nonmate = self.P
 
         # Truncated contrastive EBP
-        mwp_mate = P_mate[-2] / torch.sum(P_mate[-2])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
-        mwp_nonmate = P_nonmate[-2] / torch.sum(P_nonmate[-2])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        # if 'LightCNN9' in str(self.net):
+        #     k_mwp = 10
+        # elif 'VGG16' in str(self.net):
+        #     k_mwp = 8
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
 
         (mwp_sorted, mwp_sorted_indices) = torch.sort(torch.flatten(mwp_mate.clone()))  # ascending
         mwp_sorted_cumsum = torch.cumsum(mwp_sorted, 0)  # for percentile
@@ -1117,7 +1267,11 @@ class Whitebox(nn.Module):
         percentile_mask[mwp_sorted_indices] = (mwp_sorted_cumsum >= (percentile / 100.0) * mwp_sorted_cumsum[-1]).type(torch.FloatTensor)
         percentile_mask = percentile_mask.reshape(mwp_mate.shape)
         percentile_mask = percentile_mask.to(img_probe.device)
-        tcebp = F.relu(torch.mul(percentile_mask, mwp_mate) - torch.mul(percentile_mask, mwp_nonmate))
+        mwp_mate = torch.mul(percentile_mask, mwp_mate)        
+        mwp_nonmate = torch.mul(percentile_mask, mwp_nonmate)
+        mwp_mate = mwp_mate / torch.sum(mwp_mate)# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = mwp_nonmate / torch.sum(mwp_nonmate)# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer        
+        tcebp = F.relu(mwp_mate - mwp_nonmate)
         mwp_truncated_contrastive = np.squeeze(np.sum(tcebp.detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
         return self._mwp_to_saliency(mwp_truncated_contrastive)
 

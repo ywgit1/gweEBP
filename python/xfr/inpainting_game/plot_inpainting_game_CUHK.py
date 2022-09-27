@@ -387,7 +387,9 @@ human_labels_all = [
     ('weighted_subtree_triplet_ebp', 'Subtree EBP'),
     ('contrastive_triplet_ebp', 'cEBP'),
     ('trunc_contrastive_triplet_ebp', 'tcEBP'),
-    ('contrastive_sf_triplet_ebp', 'cEBP with SF')
+    ('contrastive_sf_triplet_ebp', 'cEBP with SF'),
+    ('contrastive_triplet_eebp', 'cEEBP'),
+    ('trunc_contrastive_triplet_eebp', 'tcEEBP'),
 ]
 def get_base_methods(methods):
     base_methods = [meth.split('_scale_')[0] for meth in methods]

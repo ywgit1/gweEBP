@@ -286,9 +286,9 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['contrastive'],
+        default=['cEEBP'],
         type=str,
-        help='restrict processing to specific subjects',
+        help='cEBP/tcEBP: contrastive; EBP: EBP; extended EBP: EEBP; Extended cEBP/tcEBP: cEEBP',
     )
 
     parser.add_argument(

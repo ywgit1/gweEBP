@@ -43,10 +43,13 @@ if __name__ == '__main__':
             # 'bbox-rise-2elem_blur=4_scale_12',
             # 'weighted_subtree_triplet_ebp_mode=awp,awp_v08_top32_cuda',
             # 'EBP_mode=affineonly_v06_cpu',
-            #'trunc_contrastive_triplet_ebp_mode=affineonly_v06_pct20_cpu',
+            'trunc_contrastive_triplet_ebp_mode=affineonly_v06_pct20_cpu',
             'contrastive_triplet_ebp_mode=affineonly_v06_cpu',
             # 'trunc_contrastive_triplet_ebp_mode=norelu_v06_pct20_cpu',
             #'GradCAM'
+            # 'EEBP_mode=affineonly_v06_cpu',
+            # 'tcEEBP_mode=affineonly_v06_pct20_cpu',
+            # 'cEEBP_mode=affineonly_v06_cpu',
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '

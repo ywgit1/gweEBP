@@ -24,6 +24,7 @@ from xfr.models.lightcnn import lightcnn_preprocess, lightcnn_preprocess_fbai
 import xfr.models.lightcnn
 from xfr.models.vgg_tri_2_vis import vgg16_preprocess
 from xfr import utils
+import gc
 
 
 class WhiteboxNetwork(object):
@@ -219,23 +220,10 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
 
     def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
         # <editor-fold desc="[+] Original implementation ..."> # not merge layer
-        self.indicator_pm = (x_probe * x_mate > 0).detach()
-        self.indicator_p_neg = (x_probe < 0).detach()
-        self.indicator_p_pos = torch.logical_not(self.indicator_p_neg)
-        self.indicator_pm_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pm)
-        self.indicator_pn = (x_probe * x_nonmate > 0).detach()
-        self.indicator_pn_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pn)
         
         self.net.fc2 = nn.Linear(256, 2, bias=False)
         self.net.fc2.weight.data.copy_(torch.cat( (x_mate, x_nonmate), dim=0) / self.net.emd_norm)
         
-        x_mate_ = torch.zeros_like(x_mate)
-        x_mate_[self.indicator_pm] = torch.abs(x_mate[self.indicator_pm])
-        self.net.fc2.pm_pos_weight = torch.cat((x_mate_, x_nonmate), dim=0).detach() / self.net.emd_norm
-        x_nonmate_ = torch.zeros_like(x_nonmate)
-        x_nonmate_[self.indicator_pn] = torch.abs(x_nonmate[self.indicator_pn])
-        self.net.fc2.pn_pos_weight = torch.cat((x_mate, x_nonmate_), dim=0).detach() / self.net.emd_norm
-        self.net.fc2.reverse_act_sign = True
         # </editor-fold>
        
         indicator = self.net.fc.indicator
@@ -248,16 +236,48 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
         self.net.fc.weight.data.copy_(fc_weight[index, :])
         self.net.fc.bias.data.copy_(fc_bias[index])
         
-        # Apply sign flipping to the embedding layer. Negative weights associated with negative responses must be flipped.
-        fc_weight = self.net.fc.weight.data
-        pm_pos_weight = F.relu(fc_weight)
-        #pm_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
-        pm_pos_weight[self.indicator_pm_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pm_flip.view(-1)])
-        self.net.fc.pm_pos_weight = pm_pos_weight
-        pn_pos_weight = F.relu(fc_weight)#torch.zeros_like(self.net.fc.weight.data)
-        #pn_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
-        pn_pos_weight[self.indicator_pn_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pn_flip.view(-1)])
-        self.net.fc.pn_pos_weight = pn_pos_weight
+        
+    # def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
+    #     # <editor-fold desc="[+] Original implementation ..."> # not merge layer
+    #     self.indicator_pm = (x_probe * x_mate > 0).detach()
+    #     self.indicator_p_neg = (x_probe < 0).detach()
+    #     self.indicator_p_pos = torch.logical_not(self.indicator_p_neg)
+    #     self.indicator_pm_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pm)
+    #     self.indicator_pn = (x_probe * x_nonmate > 0).detach()
+    #     self.indicator_pn_flip = torch.logical_and(self.indicator_p_neg, self.indicator_pn)
+        
+    #     self.net.fc2 = nn.Linear(256, 2, bias=False)
+    #     self.net.fc2.weight.data.copy_(torch.cat( (x_mate, x_nonmate), dim=0) / self.net.emd_norm)
+        
+    #     x_mate_ = torch.zeros_like(x_mate)
+    #     x_mate_[self.indicator_pm] = torch.abs(x_mate[self.indicator_pm])
+    #     self.net.fc2.pm_pos_weight = torch.cat((x_mate_, x_nonmate), dim=0).detach() / self.net.emd_norm
+    #     x_nonmate_ = torch.zeros_like(x_nonmate)
+    #     x_nonmate_[self.indicator_pn] = torch.abs(x_nonmate[self.indicator_pn])
+    #     self.net.fc2.pn_pos_weight = torch.cat((x_mate, x_nonmate_), dim=0).detach() / self.net.emd_norm
+    #     self.net.fc2.reverse_act_sign = True
+    #     # </editor-fold>
+       
+    #     indicator = self.net.fc.indicator
+    #     fc_weight = self.net.fc.filter.weight
+    #     fc_bias = self.net.fc.filter.bias
+    #     r = torch.range(0, 255)
+    #     index = (1 - indicator) * r + indicator * (r + 256)
+    #     index = index.long()
+    #     self.net.fc = nn.Linear(fc_weight.shape[1], 256, bias=True)
+    #     self.net.fc.weight.data.copy_(fc_weight[index, :])
+    #     self.net.fc.bias.data.copy_(fc_bias[index])
+        
+    #     # Apply sign flipping to the embedding layer. Negative weights associated with negative responses must be flipped.
+    #     fc_weight = self.net.fc.weight.data
+    #     pm_pos_weight = F.relu(fc_weight)
+    #     #pm_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
+    #     pm_pos_weight[self.indicator_pm_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pm_flip.view(-1)])
+    #     self.net.fc.pm_pos_weight = pm_pos_weight
+    #     pn_pos_weight = F.relu(fc_weight)#torch.zeros_like(self.net.fc.weight.data)
+    #     #pn_pos_weight[self.indicator_p_pos.view(-1)] = F.relu(fc_weight[self.indicator_p_pos.view(-1)])
+    #     pn_pos_weight[self.indicator_pn_flip.view(-1)] = F.relu(-fc_weight[self.indicator_pn_flip.view(-1)])
+    #     self.net.fc.pn_pos_weight = pn_pos_weight
 
 
     def encode(self, x):
@@ -779,7 +799,8 @@ class Whitebox(nn.Module):
         # Pre-processing
         x = x.detach().clone()  # if we do not clone, then the backward graph grows
         self._clear()  # if we do do not clear, then forward will accumulate self.A and self.dA
-
+        gc.collect()
+        
         # Forward activations
         self._ebp_mode = 'activation'
         y = self.net.classify(x.requires_grad_(True)).detach().cpu().numpy() # Obtain non-negative activations in a forward pass A_{n}
@@ -822,9 +843,14 @@ class Whitebox(nn.Module):
         P_nonmate = self.P
         
         # Contrastive EBP
+        if 'LightCNN9' in str(self.net):
+            k_mwp = 10
+        elif 'VGG16' in str(self.net):
+            k_mwp = 8
+            
         self._ebp_mode2 = None
-        mwp_mate = P_mate[8] / torch.sum(P_mate[8]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
-        mwp_nonmate = P_nonmate[8] / torch.sum(P_nonmate[8]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
         mwp_contrastive = np.squeeze(np.sum(F.relu(mwp_mate - mwp_nonmate).detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
         mwp_contrastive = np.array(PIL.Image.fromarray(mwp_contrastive).resize((img_probe.shape[3], img_probe.shape[2])))
         return self._mwp_to_saliency(mwp_contrastive)
@@ -850,9 +876,13 @@ class Whitebox(nn.Module):
         self.ebp(img_probe, P0)
         P_nonmate = self.P
 
+        if 'LightCNN9' in str(self.net):
+            k_mwp = 10
+        elif 'VGG16' in str(self.net):
+            k_mwp = 8
         # Truncated contrastive EBP
-        mwp_mate = P_mate[-2] / torch.sum(P_mate[-2])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
-        mwp_nonmate = P_nonmate[-2] / torch.sum(P_nonmate[-2])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp])# -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
 
         (mwp_sorted, mwp_sorted_indices) = torch.sort(torch.flatten(mwp_mate.clone()))  # ascending
         mwp_sorted_cumsum = torch.cumsum(mwp_sorted, 0)  # for percentile
