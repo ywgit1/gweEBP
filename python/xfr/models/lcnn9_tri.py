@@ -21,7 +21,7 @@ class LCNN9EmbeddingNet(nn.Module):
         super(LCNN9EmbeddingNet, self).__init__()
         # self.name = os.path.splitext(os.path.split(__file__)[1])[0]
         self.reset()
-        self.pool5_7x7_s1 = nn.AvgPool2d(kernel_size=[8, 8], stride=[1, 1], padding=0)
+        # self.pool5_7x7_s1 = nn.AvgPool2d(kernel_size=[8, 8], stride=[1, 1], padding=0)
         # self.feat_extract = nn.Conv2d(128, 256, kernel_size=[1, 1], stride=(1, 1))
 
     def forward(self, x):

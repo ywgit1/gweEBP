@@ -540,7 +540,8 @@ class Whitebox(nn.Module):
         self.layerlist = self.net._layer_visitor(f_preforward=self._preforward_hook, f_forward=self._forward_hook)
         self._ebp_subtree_mode = ebp_subtree_mode
         self._ebp_ext_mode = None
-
+        
+        
     def _preforward_hook(self, module, x_input):
         if self._ebp_mode == 'activation':
             if hasattr(module, 'orig_weight') and module.orig_weight is not None:
@@ -550,7 +551,21 @@ class Whitebox(nn.Module):
                 module.bias.data.copy_(module.orig_bias.data)  # Restore original bias
                 module.orig_bias = None
             return None
-
+        
+        elif self._ebp_mode == 'filter_negative_activation': # For analyzing the significance of negative features
+            if hasattr(module, 'orig_weight') and module.orig_weight is not None:
+                module.weight.data.copy_(module.orig_weight.data)  # Restore original weights
+                module.orig_weight = None
+            if hasattr(module, 'orig_bias') and module.orig_bias is not None:
+                module.bias.data.copy_(module.orig_bias.data)  # Restore original bias
+                module.orig_bias = None 
+            if x_input[0].ndim != 4 or \
+                ('LightCNN9' in str(self.net) and x_input[0].shape[1] != 3 and x_input[0].shape[2] != 128) \
+                or \
+                ('VGG16' in str(self.net) and x_input[0].shape[1] != 3 and x_input[0].shape[2] != 224):# Exclude the input image
+                x_input = tuple([F.relu(x) for x in x_input])
+            return x_input
+            
         elif self._ebp_mode == 'positive_activation':
             assert(len(self.A) > 0)  # must have called activation first
             #print(str(module))
@@ -715,6 +730,9 @@ class Whitebox(nn.Module):
             self.negA.append(tuple([-F.relu(-1 * x).detach().clone() for x in x_input]))
             return None  # no change to forward output
         
+        elif self._ebp_mode == 'filter_negative_activation':
+            return None
+            
         elif self._ebp_mode == 'positive_activation':
             return None
         
@@ -908,6 +926,9 @@ class Whitebox(nn.Module):
                         # elif 'Sigmoid' in str(module) or 'ELU' in str(module) or 'Tanh' in str(module):
                         #     raise ValueError(
                         #         'layer "%s" is a special case (https://arxiv.org/pdf/1608.00507.pdf, eq 5), and is not yet supported' % str(module))
+                        # elif 'ReLU' in str(module):
+                        #     z = torch.mul(z, a > 0)
+                        #     return z
                         else:
                             return None # Pass "z"
                     else:
@@ -1116,7 +1137,7 @@ class Whitebox(nn.Module):
         else:
             k_ret = k_layer + 1
             while k_ret < K:
-                if 'MaxPool' in self.P_layername[k_ret] or 'Split' in self.P_layername[k_ret]:
+                if 'MaxPool' in self.P_layername[k_ret] or 'Split' in self.P_layername[k_ret] or 'ReLU' in self.P_layername[k_ret]:
                     k_ret += 1
                 else:
                     break
@@ -1182,12 +1203,6 @@ class Whitebox(nn.Module):
         
         self._ebp_mode = 'positive_activation' 
         _ = self.net.classify(x.requires_grad_(True)) # Get W^{+}. Generate X for each layer in a forward pass as: X = W^{*T} * A_{n}
-
-        # EBP
-        # if 'LightCNN9' in str(self.net):
-        #     k_mwp = 10
-        # elif 'VGG16' in str(self.net):
-        #     k_mwp = 8
             
         self._ebp_mode = 'ebp'
         Xn = self.net.classify(x.requires_grad_(True))

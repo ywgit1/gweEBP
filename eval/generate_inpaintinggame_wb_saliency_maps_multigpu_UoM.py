@@ -30,6 +30,7 @@ from xfr.utils import normalize_gpus
 from xfr.inpainting_game.generate_whitebox_saliency_UoM import generate_wb_smaps
 import torch
 from tqdm import tqdm
+import gc
 
 def randomly(seq):
     # https://stackoverflow.com/a/9253366/249226
@@ -39,7 +40,6 @@ def randomly(seq):
 
 
 def run_experiment(params, params_export, gpu_queue):
-    import gc
     import imp
     gpu_id = gpu_queue.get()
     # print("GPU: {}".format(gpu_id))
@@ -94,7 +94,7 @@ def run_experiment(params, params_export, gpu_queue):
             else:
                 subtree_mode_weighted = 'affineonly_with_prior'
 
-        generate_wb_smaps(
+        ntp = generate_wb_smaps(
             wb=wb,
             net_name=net_name,
             img_base='img/%d' % int(params['IMG_NUM'][0]),
@@ -112,6 +112,7 @@ def run_experiment(params, params_export, gpu_queue):
         
         wb.to(torch.device("cpu"))
         del wb
+        gc.collect()
 
     except TypeError as e:
         print("\n\n ERROR detected. The parameters are:")
@@ -131,7 +132,7 @@ def run_experiment(params, params_export, gpu_queue):
         # except OSError: # if process has already ended, don't throw error?
         #     pass
         gpu_queue.put(gpu_id)
-    return success, (params, params_export)
+    return success, (params, params_export), ntp
 
 def run_experiments(params):
     params['overwrite'] = [params['overwrite']]
@@ -245,8 +246,11 @@ def run_experiments(params):
         pool.join()
         print('Joined pool')
     else:
+        ntotal, ntp = 0, 0
+        
         for params_ in tqdm(iterate_param_sets(params, params_export), total=len(params['SUBJECT_ID'])*len(params['MASK_ID'])):
             img_nums = valid_imgnums(net_ds, params_)
+            ntotal += len(img_nums)
             for img_num in img_nums:
                 _params_ = params_.copy()
                 _params_['IMG_NUM'] = [img_num]
@@ -254,7 +258,9 @@ def run_experiments(params):
                 params_export_ = prune_unneeded_exports(
                     params_export, _params_)
 
-                run_experiment(_params_, params_export_, gpu_queue)
+                ntp = ntp + run_experiment(_params_, params_export_, gpu_queue)[2]
+                
+        print('{}'.format(ntp / ntotal))
 
 if __name__ == '__main__':
     import argparse
@@ -286,7 +292,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['cEEBP'],
+        default=['eEBP'],
         type=str,
         help='cEBP/tcEBP: contrastive; EBP: EBP; extended EBP: EEBP; Extended cEBP/tcEBP: cEEBP',
     )

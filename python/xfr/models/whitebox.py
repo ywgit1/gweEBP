@@ -822,7 +822,7 @@ class Whitebox(nn.Module):
         P = self._mwp_to_saliency(P) if not mwp else P
         return P
 
-    def contrastive_ebp(self, img_probe, k_poschannel, k_negchannel):
+    def contrastive_ebp(self, img_probe, k_poschannel, k_negchannel, k_mwp=-2):
         """Contrastive excitation backprop"""
         assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
         assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())

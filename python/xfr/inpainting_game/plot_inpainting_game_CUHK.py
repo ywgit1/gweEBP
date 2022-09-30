@@ -385,11 +385,12 @@ human_labels_all = [
     ('meanEBP_VGG', 'VGG Mean EBP'),
     ('meanEBP_ResNet', 'ResNet Mean EBP (Caffe)'),
     ('weighted_subtree_triplet_ebp', 'Subtree EBP'),
-    ('contrastive_triplet_ebp', 'cEBP'),
-    ('trunc_contrastive_triplet_ebp', 'tcEBP'),
+    ('cEBP', 'cEBP'),
+    ('tcEBP', 'tcEBP'),
     ('contrastive_sf_triplet_ebp', 'cEBP with SF'),
-    ('contrastive_triplet_eebp', 'cEEBP'),
-    ('trunc_contrastive_triplet_eebp', 'tcEEBP'),
+    ('eEBP', 'eEBP'),
+    ('ecEBP', 'ecEBP'),
+    ('etcEBP', 'etcEBP'),
 ]
 def get_base_methods(methods):
     base_methods = [meth.split('_scale_')[0] for meth in methods]
@@ -1372,7 +1373,7 @@ def generate_plots(nonmate_classification, hgame_thresholds, hgame_percentile,
 
     fig4s.subplots_adjust(top=0.95, bottom=0.1, left=0.15, right=0.96, hspace=0.9, wspace=0.05)
     show.savefig(
-        'inpainted_twin_game_%s-net-split_simplified.png' %
+        'inpainted_twin_game_%s-net-split_simplified.pdf' %
         ('balanced-by-mask' if balance_masks else 'unbalanced'),
         fig4s,
         output_dir=output_dir)

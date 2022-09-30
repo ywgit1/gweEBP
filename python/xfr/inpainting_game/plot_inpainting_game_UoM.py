@@ -385,11 +385,12 @@ human_labels_all = [
     ('meanEBP_VGG', 'VGG Mean EBP'),
     ('meanEBP_ResNet', 'ResNet Mean EBP (Caffe)'),
     ('weighted_subtree_triplet_ebp', 'Subtree EBP'),
-    ('contrastive_triplet_ebp', 'cEBP'),
+    ('EBP', 'EBP'),
+    ('cEBP', 'cEBP'),
     ('contrastive_sf_triplet_ebp', 'cEBP with SF'),    
-    ('trunc_contrastive_triplet_ebp', 'tcEBP'),
-    ('contrastive_triplet_eebp', 'cEEBP'),
-    ('trunc_contrastive_triplet_eebp', 'tcEEBP'),
+    ('tcEBP', 'tcEBP'),
+    ('ecEBP', 'ecEBP'),
+    ('etcEBP', 'etcEBP'),
 ]
 def get_base_methods(methods):
     base_methods = [meth.split('_scale_')[0] for meth in methods]

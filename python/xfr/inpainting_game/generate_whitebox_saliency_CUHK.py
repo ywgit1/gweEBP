@@ -297,7 +297,7 @@ def run_contrastive_triplet_eebp(wb, im_mates, im_nonmates, probe_im,
 
     img_probe = wb.convert_from_numpy(probe_im).to(device)
     # print("Calling Contrastive EBP on img_probe")
-    
+
     x_probe = wb.net.encode(img_probe) # Set net.fc.indicator properly
     
     wb.net.set_triplet_classifier(x_probe, avg_x_mate,
@@ -334,6 +334,93 @@ def run_contrastive_triplet_eebp(wb, im_mates, im_nonmates, probe_im,
 
     # print("Returning Contrastive EBP")
     return img_saliency
+
+
+def run_negative_activation_analysis(wb, im_mates, im_nonmates, probe_im,
+                                net_name,
+                                ebp_version,
+                                truncate_percent,
+                                device,
+                                # merge_layers=True
+                       ):
+    """ Contrastive excitation backprop"""
+    # Add hooks to the embedding layer
+    hooks = []    
+    hooks.append(wb.net.net.fc.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc), 'hooks': hooks})
+    
+    if 'LightCNN' in str(wb.net):
+        for i, layer in enumerate(wb.layerlist):
+            if i < 23:
+                for hook in layer['hooks']:
+                    if hook is not None:
+                        hook.remove()
+        
+    x_mates_ = []
+    wb._ebp_mode = 'filter_negative_activation'    
+    for im in im_mates:
+        x_mate_ = wb.encode(wb.convert_from_numpy(im).to(device).requires_grad_(True)).detach()
+        x_mates_.append(x_mate_)
+    x_nonmates_ = []
+    for nm in im_nonmates:
+        x_nonmate_ = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates_.append(x_nonmate_)
+    avg_x_mate_ = torch.mean(torch.stack(x_mates_), axis=0)
+    avg_x_mate_ /= torch.norm(avg_x_mate_)
+    avg_x_nonmate_ = torch.mean(torch.stack(x_nonmates_), axis=0)
+    avg_x_nonmate_ /= torch.norm(avg_x_nonmate_)
+
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    # print("Calling Contrastive EBP on img_probe")
+    x_probe_ = wb.encode(img_probe)   
+    # avg_x_mate_ = torch.nn.functional.relu(avg_x_mate)
+    # avg_x_nonmate_ = torch.nn.functional.relu(avg_x_nonmate)
+    # x_probe_ = torch.nn.functional.relu(x_probe)
+    # x_mate_ /= torch.norm(x_mate_)
+    # x_nonmate_ /= torch.norm(x_nonmate_)
+    # x_probe_ /= torch.norm(x_probe_)
+    dp_1 = torch.sum(torch.mul(avg_x_mate_, x_probe_))
+    dp_2 = torch.sum(torch.mul(avg_x_nonmate_, x_probe_))
+    
+    x_mates = []
+    wb._ebp_mode = 'disable'    
+    wb.net.restore_emd_layer() # Restore the original embedding layer
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device).requires_grad_(True)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+      
+    x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
+    
+    # if (dp_1 > dp_2):
+    #     wb.tp += 1
+    # else:
+    #     wb.fn += 1
+
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate,
+                                  avg_x_nonmate)
+    # Add hooks to the triplet classification layer!
+    hooks = []
+    hooks.append(wb.net.net.fc2.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc2.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc2), 'hooks': hooks})
+    
+    # Verify if the probe is classified as the mate
+
+    wb._ebp_mode = 'disable'
+    y = wb.net.classify(img_probe)
+    y = y.detach().cpu().numpy()
+    assert np.all(y[:, 0] > y[:, 1])
+
+    return dp_1 > dp_2
 
 
 def triplet_eebp(wb, im_mates, im_nonmates, probe_im, net_name, ebp_version, device):
@@ -466,6 +553,8 @@ def generate_wb_smaps(
     im_nonmates = [im for im in utils.image_loader(nonmates)]
 
     probe_data = pd.DataFrame(probe_data)
+    
+    ntp = 0
 
     for probe_idx, (
         (probe_im, probe_fn), # image, filename
@@ -495,7 +584,7 @@ def generate_wb_smaps(
 
         result_calculated = False
 
-        if method is None or method=='EBP':
+        if method is None or method.lower()=='ebp':
             result_calculated = True
             fn = 'EBP_mode=%s_v%02d_%s' % (
                 shorten_subtree_mode(wb.ebp_subtree_mode()),
@@ -521,7 +610,7 @@ def generate_wb_smaps(
                 mask_id=mask_id,
             )
 
-        if method is None or method=='EEBP':
+        if method is None or method.lower()=='eebp':
             result_calculated = True
             fn = '%s_mode=%s_v%02d_%s' % (
                 method,
@@ -548,12 +637,13 @@ def generate_wb_smaps(
                 mask_id=mask_id,
             )
             
-        if method is None or method=='contrastive':
+        if method is None or method.lower()=='cebp':
             result_calculated = True
-            for (truncate_percent) in [None, 20]:
+            for (truncate_percent) in [None]:#, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
-                    fn = 'contrastive_triplet_ebp_mode=%s_v%02d_%s' % (
+                    fn = '%s_mode=%s_v%02d_%s' % (
+                        method,
                         shorten_subtree_mode(wb.ebp_subtree_mode()),
                         ebp_ver,
                         device.type,
@@ -561,7 +651,8 @@ def generate_wb_smaps(
                     # fn = 'low_res_cebp'
                 else:
                     # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
-                    fn = 'trunc_contrastive_triplet_ebp_mode=%s_v%02d_pct%d_%s' % (
+                    fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
+                        method,
                         shorten_subtree_mode(wb.ebp_subtree_mode()),
                         ebp_ver,
                         truncate_percent,
@@ -624,9 +715,9 @@ def generate_wb_smaps(
                         mask_id=mask_id,
                     )
                     
-        if method is None or method=='cEEBP':
+        if method is None or method.lower() == 'ecebp':
             result_calculated = True
-            for (truncate_percent) in [None, 40]:
+            for (truncate_percent) in [None]:#, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
                     fn = '%s_mode=%s_v%02d_%s' % (
@@ -638,8 +729,7 @@ def generate_wb_smaps(
                     # fn = 'low_res_cebp'
                 else:
                     # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
-                    fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
-                        method,
+                    fn = 'etcEBP_mode=%s_v%02d_pct%d_%s' % (
                         shorten_subtree_mode(wb.ebp_subtree_mode()),
                         ebp_ver,
                         truncate_percent,
@@ -665,8 +755,25 @@ def generate_wb_smaps(
                     mask_id=mask_id,
                 )
 
+        if 'analysis' in method:
+            result_calculated = True
+            correct = run_negative_activation_analysis(
+                        wb=wb,
+                        im_mates=im_mates,
+                        im_nonmates=im_nonmates,
+                        probe_im=probe_im,
+                        truncate_percent=None,
+                        net_name=net_name,
+                        ebp_version=ebp_ver,
+                        device=device
+                    )
+            if correct:
+                ntp += 1
+                
         if not result_calculated:
             raise RuntimeError(
                 "Unknown method type %s (valid types: 'meanEBP', "
                 "'contrastive', 'weighted-subtree')" % method
             )
+            
+    return ntp

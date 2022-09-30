@@ -44,11 +44,11 @@ if __name__ == '__main__':
             # 'bbox-rise-2elem_blur=4_scale_12',
             # 'weighted_subtree_triplet_ebp_mode=awp,awp_v08_top32_cuda',
             # 'contrastive_triplet_ebp_mode=affineonly_v06_cpu',
-            # 'trunc_contrastive_triplet_ebp_mode=affineonly_v06_pct20_cpu',
-            # 'contrastive_triplet_ebp_sf_mode=affineonly_v06_cpu'
-            # 'EEBP_mode=affineonly_v06_cpu',
-            'cEEBP_mode=affineonly_v06_cpu',
-            'tcEEBP_mode=affineonly_v06_pct10_cpu',
+            # 'tcEBP_mode=affineonly_v06_pct20_cpu',
+            'cEBP_mode=affineonly_v06_cpu',
+            # 'eEBP_mode=affineonly_v06_cpu',
+            'ecEBP_mode=affineonly_v06_cpu',
+            # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'GradCAM'
         ],
         dest='METHOD',
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-lcnn9',
+            'CUHK-vgg16',
         ],
         dest='NET',
         help='network to analyze',

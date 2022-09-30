@@ -13,3 +13,4 @@ eval/cache/
 *.jpg
 *.jpeg
 *.bmp
+*.npy
