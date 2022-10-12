@@ -284,6 +284,64 @@ def run_weighted_subtree_triplet_ebp(
     print("Returning weighted Subtree EBP")
     return img_subtree
 
+def run_gradient_weighted_ecEBP(wb, im_mates, im_nonmates, probe_im,
+                                net_name,
+                                ebp_version,
+                                device,
+                                # merge_layers=True
+                       ):
+    """ Contrastive excitation backprop"""
+
+    x_mates = []
+    wb.net.restore_emd_layer()
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    # print("Calling Contrastive EBP on img_probe")
+
+    x_probe = wb.net.encode(img_probe) # Set net.fc.indicator properly
+    
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate,
+                                  avg_x_nonmate)
+    # Add hooks to the newly added triplet classification layer!
+    hooks = []    
+    hooks.append(wb.net.net.fc.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc), 'hooks': hooks})
+    hooks = []
+    hooks.append(wb.net.net.fc2.register_forward_hook(wb._forward_hook))
+    hooks.append(wb.net.net.fc2.register_forward_pre_hook(wb._preforward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc2), 'hooks': hooks})
+    
+    # Verify if the probe is classified as the mate
+    y = wb.net.classify(img_probe)
+    y = y.detach().cpu().numpy()
+    assert np.all(y[:, 0] > y[:, 1])
+    K = None
+    k_mwp = -2
+    if 'LightCNN9' in str(wb.net):
+        K = 12
+        k_mwp = 10
+    elif 'VGG16' in str(wb.net):
+        K = 9
+        k_mwp = 8
+
+    img_saliency = wb.gradient_weighted_ecEBP(
+        img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
+
+    # print("Returning Contrastive EBP")
+    return img_saliency
+
 def run_negative_activation_analysis(wb, im_mates, im_nonmates, probe_im,
                                 net_name,
                                 ebp_version,
@@ -603,12 +661,13 @@ def generate_wb_smaps(
 
         if method is None or method=='eEBP':
             result_calculated = True
-            fn = '%s_mode=%s_v%02d_%s' % (
-                method,
-                shorten_subtree_mode(wb.ebp_subtree_mode()),
-                ebp_ver,
-                device.type,
-            )
+            # fn = '%s_mode=%s_v%02d_%s' % (
+            #     method,
+            #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+            #     ebp_ver,
+            #     device.type,
+            # )
+            fn = 'eEBP' # For Siva
             create_save_smap(
                 fn,
                 output_dir, overwrite,
@@ -707,24 +766,25 @@ def generate_wb_smaps(
                     
         if method is None or method == 'ecEBP':
             result_calculated = True
-            for (truncate_percent) in [None, 20]:
+            for (truncate_percent) in [20]:#, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
-                    fn = '%s_mode=%s_v%02d_%s' % (
-                        method,
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        device.type,
-                    )
-                    # fn = 'low_res_cebp'
+                    # fn = '%s_mode=%s_v%02d_%s' % (
+                    #     method,
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     device.type,
+                    # )
+                    fn = 'ecEBP' # For Siva
                 else:
                     # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
-                    fn = 'etcEBP_mode=%s_v%02d_pct%d_%s' % (
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        truncate_percent,
-                        device.type,
-                    )
+                    # fn = 'etcEBP_mode=%s_v%02d_pct%d_%s' % (
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     truncate_percent,
+                    #     device.type,
+                    # )
+                    fn = 'etcEBP' # For Siva
                 create_save_smap(
                     fn,
                     output_dir, overwrite,
@@ -744,6 +804,28 @@ def generate_wb_smaps(
                     mask_id=mask_id,
                 )
 
+        if method is None or method.lower() == 'gwecebp':
+            result_calculated = True
+            fn = 'gwecEBP'
+            create_save_smap(
+                fn,
+                output_dir, overwrite,
+                smap_fn=lambda: run_gradient_weighted_ecEBP(
+                    wb=wb,
+                    im_mates=im_mates,
+                    im_nonmates=im_nonmates,
+                    probe_im=probe_im,
+                    net_name=net_name,
+                    ebp_version=ebp_ver,
+                    device=device,
+                    # merge_layers=merge_layers
+                ),
+                probe_im=probe_im,
+                probe_info=probe_row,
+                mask_im=mask_im,
+                mask_id=mask_id,
+            )
+            
         if 'analysis' in method:
             result_calculated = True
             correct = run_negative_activation_analysis(

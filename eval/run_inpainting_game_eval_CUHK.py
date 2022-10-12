@@ -42,14 +42,17 @@ if __name__ == '__main__':
         nargs='+', default=[
             # 'EBP_mode=affineonly_v06_cpu',
             # 'bbox-rise-2elem_blur=4_scale_12',
-            # 'weighted_subtree_triplet_ebp_mode=awp,awp_v08_top32_cuda',
+            # 'weighted_subtree_triplet_ebp_mode=awp,awp_v08_top32_cpu',
+            # 'weighted_subtree_triplet_ebp_mode=affineonly,awp_v06_top32_cpu',
             # 'contrastive_triplet_ebp_mode=affineonly_v06_cpu',
             # 'tcEBP_mode=affineonly_v06_pct20_cpu',
-            'cEBP_mode=affineonly_v06_cpu',
+            # 'cEBP_mode=affineonly_v06_cpu',
             # 'eEBP_mode=affineonly_v06_cpu',
-            'ecEBP_mode=affineonly_v06_cpu',
+            # 'ecEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
-            # 'GradCAM'
+            # 'GradCAM',
+            'gwecEBP',
+            'ecEBP'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '
@@ -111,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-vgg16',
+            'CUHK-lcnn9',
         ],
         dest='NET',
         help='network to analyze',

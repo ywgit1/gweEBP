@@ -286,20 +286,21 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['eEBP'],
+        default=['gwecEBP'],
         type=str,
         help='restrict processing to specific subjects',
     )
 
     parser.add_argument(
         '--ebp-ver', nargs='+', dest='EBP_VER',
-        default=['6'],
+        default=['8'],
         help='EBP version to use (leave as default)',
         )
     parser.add_argument(
         '--init-ebp-subtree-mode', nargs='+',
         dest='INIT_EBP_SUBTREE_MODE',
         default=['affineonly'],
+        # default=['affineonly_with_prior'],
         help='EBP subtree mode used in whitebox constructor.',
     )
     parser.add_argument(

@@ -531,6 +531,7 @@ class Whitebox(nn.Module):
         self.X_pn = []
         self.X_pp = []
         self.X_nn = []
+        self.gradlist = []
 
         # batch size is not applied to all functions, just embeddings
         self.batch_size = 32
@@ -839,6 +840,8 @@ class Whitebox(nn.Module):
             self.X_np.append(X_np)
             X_nn = self.X_nn.pop(0)
             self.X_nn.append(X_nn)
+            dA = self.gradlist.pop(0)
+            self.gradlist.append(dA)
 
             # Affine layers only
             if 'pos_weight' in self._ebp_ext_mode and hasattr(module, 'pos_weight'):     
@@ -870,12 +873,20 @@ class Whitebox(nn.Module):
                     #zh = F.relu(z) # Z is back-propagated from the input tensor of the n-th layer to the (n-1)-th layer
                     if self._ebp_ext_mode == 'pos_act_pos_weight':
                         p = torch.mul(pa, z) # step 5, closure (a): MWP for this layer: P_{n} = A^{+}_{n} * Z 
+                        if dA is not None:
+                            p = p * F.relu(torch.mul(dA, a > 0))
                     elif self._ebp_ext_mode == 'pos_act_neg_weight':
                         p = torch.mul(pa, z)
+                        if dA is not None:
+                            p = p * F.relu(torch.mul(dA, a > 0))
                     elif self._ebp_ext_mode == 'neg_act_pos_weight':
                         p = torch.mul(na, z) # P^{-}_{n} = A^{-}_{n} * Z
+                        if dA is not None:
+                            p = p * F.relu(-torch.mul(dA, a < 0))
                     elif self._ebp_ext_mode == 'neg_act_neg_weight':
                         p = torch.mul(na, z)
+                        if dA is not None:
+                            p = p * F.relu(-torch.mul(dA, a < 0))                        
                     else:
                         raise ValueError('Unknown ebp_ext_mode %s' % self._ebp_ext_mode)
                     p = F.relu(p) # P must be non-negative
@@ -897,10 +908,16 @@ class Whitebox(nn.Module):
                         #assert(torch.sum(x < 0) == 0)
                         x = x + self.eps
                         p_ = torch.mul(p, a > 0) # P(A^{+})
+                        # if dA is not None:
+                        #     dA_ = F.relu(dA)
+                        #     p_ = p_ * dA_
                     elif self._ebp_ext_mode in ['neg_act_neg_weight']:
                         x = x_nn + x_pp
                         x = x + self.eps
                         p_ = torch.mul(p, a > 0)
+                        # if dA is not None:
+                        #     dA_ = F.relu(dA)
+                        #     p_ = p_ * dA_
                     elif self._ebp_ext_mode in ['pos_act_neg_weight']:#, 'neg_act_pos_weight']:
                         # if 'Linear' in str(module):#debug
                         #     x = x_pn # + x_np # x < 0
@@ -909,10 +926,16 @@ class Whitebox(nn.Module):
                         #assert(torch.sum(x > 0) == 0)
                         x = x - self.eps
                         p_ = torch.mul(p, a < 0) # P(A^{-})
+                        # if dA is not None:
+                        #     dA_ = F.relu(-dA)
+                        #     p_ = p_ * dA_
                     elif self._ebp_ext_mode in ['neg_act_pos_weight']:
                         x = x_np + x_pn
                         x = x - self.eps
                         p_ = torch.mul(p, a < 0)
+                        # if dA is not None:
+                        #     dA_ = F.relu(-dA)
+                        #     p_ = p_ * dA_
                     else:
                         raise ValueError('Unknown ebp_ext_mode %s' % self._ebp_ext_mode)
                         
@@ -1395,8 +1418,8 @@ class Whitebox(nn.Module):
         y = self.net.classify(x.requires_grad_(True))
         y0 = torch.tensor([0]).to(y.device)
         # y1 = torch.tensor([1]).cuda() if next(self.net.net.parameters()).is_cuda else torch.tensor([1])
-        F.cross_entropy(y, y0).backward(retain_graph=True)  # Binary classes = {mated, nonmated}
-        gradlist = self.dA
+        # F.cross_entropy(y, y0).backward(retain_graph=True)  # Binary classes = {mated, nonmated}
+        # gradlist = self.dA
         self._clear()
 
         # Forward and backward to save mate and non-mate data gradients in layer visitor order
@@ -1479,6 +1502,51 @@ class Whitebox(nn.Module):
             [self._mwp_to_saliency(P) if do_mwp_to_saliency else P for P in P_img_valid],
             P_subtree_valid,
             k_subtree_valid)
+
+
+    def gradient_weighted_ecEBP(self, img_probe, x_mate, x_nonmate, k_poschannel, k_negchannel, K=None, k_mwp=-2):
+        assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
+        assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())
+            
+        self._ebp_mode = 'activation'
+        x = img_probe.detach().clone()  # if we do not clone, then the backward graph grows for some reason
+        emd = self.net.encode(x.requires_grad_(True))
+        x_mate, x_nonmate = x_mate.to(x.device), x_nonmate.to(x.device)
+        triplet_gain = ((emd * x_mate).sum(1) - (emd * x_nonmate).sum(1)).mean()
+        triplet_gain.backward(retain_graph=False)
+        self.dA.reverse()
+        self.gradlist = [None for x in range(len(self.dA))]
+        # self.gradlist[-1] = self.dA[-1]
+        # self.gradlist[-2] = self.dA[-2]
+        # self.gradlist[-3] = self.dA[-3]
+        # self.gradlist[len(self.dA) - k_mwp - 1] = self.dA[len(self.dA) - k_mwp - 1]
+        self.gradlist = self.dA
+        self._clear()
+        
+        # Mated EBP
+        P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
+        P0 = P0.to(img_probe.device)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
+        P_mate = self.P
+
+        # Non-mated EBP
+        # triplet_loss = ((emd * x_nonmate).sum(1) - (emd * x_mate).sum(1)).mean()
+        # triplet_loss.backward(retain_graph=False)
+        self.gradlist = [-grad if grad is not None else grad for grad in self.gradlist]
+        self._clear()
+        
+        P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
+        P0 = P0.to(img_probe.device)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
+        P_nonmate = self.P
+        
+        # Contrastive EBP
+        mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp]) 
+        mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp]) 
+        mwp_contrastive = np.squeeze(np.sum(F.relu(mwp_mate - mwp_nonmate).detach().cpu().numpy(), axis=1).astype(np.float32))  # pool over channels
+        mwp_contrastive = np.array(PIL.Image.fromarray(mwp_contrastive).resize((img_probe.shape[3], img_probe.shape[2])))
+        return self._mwp_to_saliency(mwp_contrastive)                                                                                                                                                     
+
 
     def ebp_subtree_mode(self):
         return self._ebp_subtree_mode

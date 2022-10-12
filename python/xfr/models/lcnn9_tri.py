@@ -34,8 +34,11 @@ class LCNN9EmbeddingNet(nn.Module):
         x = self.features_part2(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        # x = F.normalize(x, p=2, dim=1)
         self.emd_norm = torch.norm(x, p=2, dim=1).detach().clone()
+        # Do not normalize the embedding for EBP as the normalization should not
+        # be considered in the back-propagation. Instead, the embedding will be scaled 
+        # by the normalization factor in fc2.
+        # x = F.normalize(x, p=2, dim=1) 
         out = self.fc2(x)
         return out, x
 
