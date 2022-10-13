@@ -51,7 +51,7 @@ if __name__ == '__main__':
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             'gwecEBP',
-            'ecEBP'
+            # 'ecEBP'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '

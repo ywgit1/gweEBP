@@ -292,7 +292,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['gwecEBP'],
+        default=['gweEBP'],
         type=str,
         help='cEBP/tcEBP: contrastive; EBP: EBP; extended EBP: eEBP; Extended cEBP/tcEBP: ecEBP/etcEBP',
     )

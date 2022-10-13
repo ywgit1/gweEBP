@@ -1503,8 +1503,7 @@ class Whitebox(nn.Module):
             P_subtree_valid,
             k_subtree_valid)
 
-
-    def gradient_weighted_ecEBP(self, img_probe, x_mate, x_nonmate, k_poschannel, k_negchannel, K=None, k_mwp=-2):
+    def gradient_weighted_eEBP(self, img_probe, x_mate, x_nonmate, k_poschannel, k_negchannel, K=None, k_mwp=-2):
         assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
         assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())
             
@@ -1527,13 +1526,54 @@ class Whitebox(nn.Module):
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
+        P = self.P[k_mwp]
+        P = P / torch.sum(P) 
+        P = np.squeeze(np.sum(P.detach().cpu().numpy(), axis=1)).astype(np.float32) 
+        P = np.array(PIL.Image.fromarray(P).resize((img_probe.shape[3], img_probe.shape[2])))
+        P = self._mwp_to_saliency(P)
+        return P  
+    
+    def gradient_weighted_ecEBP(self, img_probe, x_mate, x_nonmate, k_poschannel, k_negchannel, K=None, k_mwp=-2):
+        assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())
+        assert(k_negchannel >= 0 and k_negchannel < self.net.num_classes())
+            
+        self._ebp_mode = 'activation'
+        x = img_probe.detach().clone()  # if we do not clone, then the backward graph grows for some reason
+        emd = self.net.encode(x.requires_grad_(True))
+        x_mate, x_nonmate = x_mate.to(x.device), x_nonmate.to(x.device)
+        triplet_gain = ((emd * x_mate).sum(1) - (emd * x_nonmate).sum(1)).mean()
+        triplet_gain.backward(retain_graph=False)
+        
+        # y = self.net.classify(x.requires_grad_(True))
+        # y0 = torch.tensor([0]).to(y.device)
+        # F.cross_entropy(y, y0).backward(retain_graph=False)  # Binary classes = {mated, nonmated}
+        
+        self.dA.reverse()
+        # self.gradlist = [None for x in range(len(self.dA))]
+        # self.gradlist[-1] = self.dA[-1]
+        # self.gradlist[-2] = self.dA[-2]
+        # self.gradlist[-3] = self.dA[-3]
+        # self.gradlist[len(self.dA) - k_mwp - 1] = self.dA[len(self.dA) - k_mwp - 1]
+        self.gradlist = self.dA
+        self._clear()
+        
+        # Mated EBP
+        P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_poschannel] = 1.0;  # one-hot
+        P0 = P0.to(img_probe.device)
+        self.eebp(img_probe, P0, mwp=False, K=K, k_mwp=k_mwp)
         P_mate = self.P
+        self._clear()
 
         # Non-mated EBP
-        # triplet_loss = ((emd * x_nonmate).sum(1) - (emd * x_mate).sum(1)).mean()
-        # triplet_loss.backward(retain_graph=False)
         self.gradlist = [-grad if grad is not None else grad for grad in self.gradlist]
-        self._clear()
+        # self._ebp_mode = 'activation'
+        # x = img_probe.detach().clone()
+        # y = self.net.classify(x.requires_grad_(True))
+        # y0 = torch.tensor([1]).to(y.device)
+        # F.cross_entropy(y, y0).backward(retain_graph=False)  # Binary classes = {mated, nonmated}
+        # self.dA.reverse()
+        # self.gradlist = self.dA
+        # self._clear()
         
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)

@@ -52,7 +52,7 @@ if __name__ == '__main__':
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'GradCAM',
             'gwecEBP',
-            'ecEBP'
+            # 'gweEBP'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '

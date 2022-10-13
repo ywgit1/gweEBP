@@ -317,7 +317,7 @@ if __name__ == '__main__':
         help='restrict processing to specific masks, zero padded',
     )
     parser.add_argument('--net', nargs='+',
-                        default=['CUHK-vgg16'],
+                        default=['CUHK-lcnn9'],
                         dest='WB_NET')
 
     parser.add_argument(
