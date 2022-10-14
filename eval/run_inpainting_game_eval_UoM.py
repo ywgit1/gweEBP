@@ -50,7 +50,7 @@ if __name__ == '__main__':
             # 'eEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
-            'gwecEBP',
+            'gweEBP',
             # 'ecEBP'
         ],
         dest='METHOD',
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'lcnn9',
+            'vgg16',
         ],
         dest='NET',
         help='network to analyze',

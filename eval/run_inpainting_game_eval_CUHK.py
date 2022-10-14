@@ -51,7 +51,7 @@ if __name__ == '__main__':
             # 'ecEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'GradCAM',
-            'gwecEBP',
+            'gweEBP',
             # 'gweEBP'
         ],
         dest='METHOD',
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-lcnn9',
+            'CUHK-vgg16',
         ],
         dest='NET',
         help='network to analyze',

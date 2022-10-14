@@ -726,9 +726,20 @@ class Whitebox(nn.Module):
             #     self.A.append(tuple([F.relu(x.detach().clone()) for x in x_input]))  # save non-negative layer activation on forward
             # return None  # no change to forward output
 
-            self.A.append(tuple([x.detach().clone() for x in x_input]))
-            self.posA.append(tuple([F.relu(x.detach().clone()) for x in x_input]))
-            self.negA.append(tuple([-F.relu(-1 * x).detach().clone() for x in x_input]))
+            if self.gradlist is not None and len(self.gradlist) > 0:
+                dA = self.gradlist.pop(0)
+                self.gradlist.append(dA)
+                # Apply gradient weighting to neuron reponses
+                posA = tuple([F.relu(x.detach().clone()) * F.relu(dA) for x in x_input])
+                negA = tuple([-F.relu(-1 * x).detach().clone() * F.relu(-dA) for x in x_input])
+                A = tuple([pa + na for pa, na in zip(posA, negA)])
+                self.A.append(A)
+                self.posA.append(posA)
+                self.negA.append(negA)
+            else:
+                self.A.append(tuple([x.detach().clone() for x in x_input]))
+                self.posA.append(tuple([F.relu(x.detach().clone()) for x in x_input]))
+                self.negA.append(tuple([-F.relu(-1 * x).detach().clone() for x in x_input]))
             return None  # no change to forward output
         
         elif self._ebp_mode == 'filter_negative_activation':
@@ -869,24 +880,26 @@ class Whitebox(nn.Module):
                     #   https://github.com/pytorch/pytorch/issues/12863
                     #   https://github.com/pytorch/pytorch/issues/25723
 
+                    assert(torch.sum(torch.isnan(z)) == 0)
+                                
                     # Implement equation 10 (algorithm 1)
                     #zh = F.relu(z) # Z is back-propagated from the input tensor of the n-th layer to the (n-1)-th layer
                     if self._ebp_ext_mode == 'pos_act_pos_weight':
                         p = torch.mul(pa, z) # step 5, closure (a): MWP for this layer: P_{n} = A^{+}_{n} * Z 
-                        if dA is not None:
-                            p = p * F.relu(torch.mul(dA, a > 0))
+                        # if dA is not None:
+                        #     p = p * F.relu(torch.mul(dA, a > 0))
                     elif self._ebp_ext_mode == 'pos_act_neg_weight':
                         p = torch.mul(pa, z)
-                        if dA is not None:
-                            p = p * F.relu(torch.mul(dA, a > 0))
+                        # if dA is not None:
+                        #     p = p * F.relu(torch.mul(dA, a > 0))
                     elif self._ebp_ext_mode == 'neg_act_pos_weight':
                         p = torch.mul(na, z) # P^{-}_{n} = A^{-}_{n} * Z
-                        if dA is not None:
-                            p = p * F.relu(-torch.mul(dA, a < 0))
+                        # if dA is not None:
+                        #     p = p * F.relu(-torch.mul(dA, a < 0))
                     elif self._ebp_ext_mode == 'neg_act_neg_weight':
                         p = torch.mul(na, z)
-                        if dA is not None:
-                            p = p * F.relu(-torch.mul(dA, a < 0))                        
+                        # if dA is not None:
+                        #     p = p * F.relu(-torch.mul(dA, a < 0))                        
                     else:
                         raise ValueError('Unknown ebp_ext_mode %s' % self._ebp_ext_mode)
                     p = F.relu(p) # P must be non-negative
@@ -897,6 +910,7 @@ class Whitebox(nn.Module):
                     if p_prior is not None:
                         p.data.copy_(p_prior)  # override with prior
                     self.P_layername.append(str(module))  # MWP layer, closure (self.P_layername)
+                    p = p / (torch.sum(p) + self.eps)
                     self.P.append(p)  # marginal winning probability, closure (self.P)
 
                     # Prepare Y = P / X for the next/bottom layer
@@ -905,7 +919,6 @@ class Whitebox(nn.Module):
                         #     x = x_pp# + x_nn # x > 0
                         # else:
                         x = x_pp + x_nn
-                        #assert(torch.sum(x < 0) == 0)
                         x = x + self.eps
                         p_ = torch.mul(p, a > 0) # P(A^{+})
                         # if dA is not None:
@@ -923,7 +936,6 @@ class Whitebox(nn.Module):
                         #     x = x_pn # + x_np # x < 0
                         # else:
                         x = x_pn + x_np
-                        #assert(torch.sum(x > 0) == 0)
                         x = x - self.eps
                         p_ = torch.mul(p, a < 0) # P(A^{-})
                         # if dA is not None:
@@ -1514,12 +1526,13 @@ class Whitebox(nn.Module):
         triplet_gain = ((emd * x_mate).sum(1) - (emd * x_nonmate).sum(1)).mean()
         triplet_gain.backward(retain_graph=False)
         self.dA.reverse()
-        self.gradlist = [None for x in range(len(self.dA))]
+        # self.gradlist = [None for x in range(len(self.dA))]
         # self.gradlist[-1] = self.dA[-1]
         # self.gradlist[-2] = self.dA[-2]
         # self.gradlist[-3] = self.dA[-3]
         # self.gradlist[len(self.dA) - k_mwp - 1] = self.dA[len(self.dA) - k_mwp - 1]
         self.gradlist = self.dA
+        # self.gradlist = [dA / torch.sum(torch.abs(dA)) for dA in self.dA]
         self._clear()
         
         # Mated EBP

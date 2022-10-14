@@ -286,7 +286,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['gwecEBP'],
+        default=['gweEBP'],
         type=str,
         help='restrict processing to specific subjects',
     )
@@ -317,7 +317,7 @@ if __name__ == '__main__':
         help='restrict processing to specific masks, zero padded',
     )
     parser.add_argument('--net', nargs='+',
-                        default=['CUHK-lcnn9'],
+                        default=['CUHK-vgg16'],
                         dest='WB_NET')
 
     parser.add_argument(
