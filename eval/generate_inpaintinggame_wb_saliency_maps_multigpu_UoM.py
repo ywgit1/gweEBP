@@ -294,7 +294,7 @@ if __name__ == '__main__':
         '--method', nargs='*',
         default=['gweEBP'],
         type=str,
-        help='cEBP/tcEBP: contrastive; EBP: EBP; extended EBP: eEBP; Extended cEBP/tcEBP: ecEBP/etcEBP',
+        help='cEBP/tcEBP: cEBP; EBP: EBP; gradient weighted extended EBP: gweEBP',
     )
 
     parser.add_argument(

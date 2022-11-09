@@ -3,7 +3,7 @@ __pycache__
 .idea
 data/
 demo/
-./models/
+models/
 *.pth
 *.tar
 output/
@@ -14,3 +14,4 @@ eval/cache/
 *.jpeg
 *.bmp
 *.npy
+paper/*.pdf

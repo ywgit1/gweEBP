@@ -50,9 +50,11 @@ if __name__ == '__main__':
             # 'eEBP_mode=affineonly_v06_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
-            # 'GradCAM',
             'gweEBP',
-            # 'gweEBP'
+            # 'EBP',
+            # 'cEBP',
+            # 'tcEBP',
+            # 'GradCAM'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '
@@ -114,7 +116,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-vgg16',
+            'CUHK-lcnn9',
         ],
         dest='NET',
         help='network to analyze',

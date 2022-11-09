@@ -604,12 +604,12 @@ def run_gradient_weighted_eEBP(wb, im_mates, im_nonmates, probe_im,
     assert np.all(y[:, 0] > y[:, 1])
     K = None
     k_mwp = -2
-    if 'LightCNN9' in str(wb.net):
-        K = 12
-        k_mwp = 10
-    elif 'VGG16' in str(wb.net):
-        K = 9
-        k_mwp = 8
+    # if 'LightCNN9' in str(wb.net):
+    #     K = 12
+    #     k_mwp = 10
+    # elif 'VGG16' in str(wb.net):
+    #     K = 9
+    #     k_mwp = 8
 
     img_saliency = wb.gradient_weighted_eEBP(
         img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
@@ -712,11 +712,12 @@ def generate_wb_smaps(
 
         if method is None or method.lower()=='ebp':
             result_calculated = True
-            fn = 'EBP_mode=%s_v%02d_%s' % (
-                shorten_subtree_mode(wb.ebp_subtree_mode()),
-                ebp_ver,
-                device.type,
-            )
+            # fn = 'EBP_mode=%s_v%02d_%s' % (
+            #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+            #     ebp_ver,
+            #     device.type,
+            # )
+            fn = 'EBP'
             create_save_smap(
                 fn,
                 output_dir, overwrite,
@@ -769,22 +770,23 @@ def generate_wb_smaps(
             for (truncate_percent) in [None, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
-                    fn = '%s_mode=%s_v%02d_%s' % (
-                        method,
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        device.type,
-                    )
-                    # fn = 'low_res_cebp'
+                    # fn = '%s_mode=%s_v%02d_%s' % (
+                    #     method,
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     device.type,
+                    # )
+                    fn = 'cEBP'
                 else:
                     # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
-                    fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
-                        method,
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        truncate_percent,
-                        device.type,
-                    )
+                    # fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
+                    #     method,
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     truncate_percent,
+                    #     device.type,
+                    # )
+                    fn = 'tcEBP'
                 create_save_smap(
                     fn,
                     output_dir, overwrite,

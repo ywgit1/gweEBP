@@ -693,11 +693,12 @@ def generate_wb_smaps(
 
         if method is None or method=='EBP':
             result_calculated = True
-            fn = 'EBP_mode=%s_v%02d_%s' % (
-                shorten_subtree_mode(wb.ebp_subtree_mode()),
-                ebp_ver,
-                device.type,
-            )
+            # fn = 'EBP_mode=%s_v%02d_%s' % (
+            #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+            #     ebp_ver,
+            #     device.type,
+            # )
+            fn = 'EBP'
             create_save_smap(
                 fn,
                 output_dir, overwrite,
@@ -750,22 +751,23 @@ def generate_wb_smaps(
             for (truncate_percent) in [None, 20]:
                 if truncate_percent is None:
                     # fn = 'contrastive_triplet_ebp_v%02d_%s' % (
-                    fn = '%s_mode=%s_v%02d_%s' % (
-                        method,
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        device.type,
-                    )
-                    # fn = 'low_res_cebp'
+                    # fn = '%s_mode=%s_v%02d_%s' % (
+                    #     method,
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     device.type,
+                    # )
+                    fn = 'cEBP'
                 else:
                     # fn = 'trunc_contrastive_triplet_ebp_v%02d_pct%d_%s' % (
-                    fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
-                        method,
-                        shorten_subtree_mode(wb.ebp_subtree_mode()),
-                        ebp_ver,
-                        truncate_percent,
-                        device.type,
-                    )
+                    # fn = 't%s_mode=%s_v%02d_pct%d_%s' % (
+                    #     method,
+                    #     shorten_subtree_mode(wb.ebp_subtree_mode()),
+                    #     ebp_ver,
+                    #     truncate_percent,
+                    #     device.type,
+                    # )
+                    fn = 'tcEBP'
                 create_save_smap(
                     fn,
                     output_dir, overwrite,

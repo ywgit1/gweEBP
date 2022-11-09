@@ -46,12 +46,15 @@ if __name__ == '__main__':
             # 'tcEBP_mode=affineonly_v06_pct20_cpu',
             # 'cEBP_mode=affineonly_v06_cpu',
             # 'trunc_contrastive_triplet_ebp_mode=norelu_v06_pct20_cpu',
-            # 'GradCAM',
             # 'eEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             'gweEBP',
-            # 'ecEBP'
+            'EBP',
+            'cEBP',
+            'tcEBP',
+            'GradCAM'
+            
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '
