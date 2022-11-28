@@ -69,6 +69,67 @@ def test_subtree_triplet_ebp(wb, im_mates, im_nonmates, probe_im,
     return img_subtree
 
 
+def run_clrp(wb, im_mates, im_nonmates, probe_im, net_name, device):
+    x_mates = []
+    wb._clrp_mode = 'disable'    
+    wb.net.restore_emd_layer(device=device) # Restore the original embedding layer
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device).requires_grad_(True)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
+
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
+    hooks = []    
+    hooks.append(wb.net.net.fc.register_forward_hook(wb.linear_forward_hook))
+    hooks.append(wb.net.net.fc.register_backward_hook(wb.linear_backward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc), 'hooks': hooks})
+    # Add hooks to the triplet classification layer!
+    hooks = []
+    hooks.append(wb.net.net.fc2.register_forward_hook(wb.linear_forward_hook))
+    hooks.append(wb.net.net.fc2.register_backward_hook(wb.linear_backward_hook))
+    wb.layerlist.append({'name': str(wb.net.net.fc2), 'hooks': hooks})
+    
+    img_saliency = wb.clrp(
+        img_probe, target_class=0, device=device, contrastive_signal=True, CLRP='type1', k_R=8)    
+    # 
+    
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
+    
+    return img_saliency
+    
+
+def run_agf(wb, im_mates, im_nonmates, probe_im, net_name, device):
+    x_mates = []   
+    wb.net.restore_emd_layer(device=device) # Restore the original embedding layer
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device).requires_grad_(True)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
+    
+    img_saliency = wb.AGF(img_probe)
+    
+    return img_saliency    
+    
 def run_contrastive_triplet_ebp(wb, im_mates, im_nonmates, probe_im,
                                 net_name,
                                 ebp_version,
@@ -129,6 +190,8 @@ def run_contrastive_triplet_ebp(wb, im_mates, im_nonmates, probe_im,
             img_probe, k_poschannel=0, k_negchannel=1,
             percentile=truncate_percent, k_mwp=k_mwp)
 
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
     # print("Returning Contrastive EBP")
     return img_saliency
 
@@ -193,6 +256,8 @@ def run_contrastive_triplet_eebp(wb, im_mates, im_nonmates, probe_im,
             img_probe, k_poschannel=0, k_negchannel=1,
             percentile=truncate_percent, K=K, k_mwp=k_mwp)
 
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
     # print("Returning Contrastive EBP")
     return img_saliency
 
@@ -339,6 +404,9 @@ def run_gradient_weighted_ecEBP(wb, im_mates, im_nonmates, probe_im,
     img_saliency = wb.gradient_weighted_ecEBP(
         img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
 
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
+    
     # print("Returning Contrastive EBP")
     return img_saliency
 
@@ -352,6 +420,8 @@ def run_gradient_weighted_eEBP(wb, im_mates, im_nonmates, probe_im,
 
     x_mates = []
     wb.net.restore_emd_layer()
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
     for im in im_mates:
         x_mate = wb.encode(wb.convert_from_numpy(im).to(device)).detach()
         x_mates.append(x_mate)
@@ -397,6 +467,9 @@ def run_gradient_weighted_eEBP(wb, im_mates, im_nonmates, probe_im,
     img_saliency = wb.gradient_weighted_eEBP(
         img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
 
+    wb.layerlist.pop(-1)
+    wb.layerlist.pop(-1)
+    
     # print("Returning Contrastive EBP")
     return img_saliency
 
@@ -901,6 +974,46 @@ def generate_wb_smaps(
                     ebp_version=ebp_ver,
                     device=device,
                     # merge_layers=merge_layers
+                ),
+                probe_im=probe_im,
+                probe_info=probe_row,
+                mask_im=mask_im,
+                mask_id=mask_id,
+            )
+
+        if method is None or method.lower() == 'clrp':
+            result_calculated = True
+            fn = 'cLRP'
+            create_save_smap(
+                fn,
+                output_dir, overwrite,
+                smap_fn=lambda: run_clrp(
+                    wb=wb,
+                    im_mates=im_mates,
+                    im_nonmates=im_nonmates,
+                    probe_im=probe_im,
+                    net_name=net_name,
+                    device=device
+                ),
+                probe_im=probe_im,
+                probe_info=probe_row,
+                mask_im=mask_im,
+                mask_id=mask_id,
+            )
+
+        if method is None or method.lower() == 'agf':
+            result_calculated = True
+            fn = 'AGF'
+            create_save_smap(
+                fn,
+                output_dir, overwrite,
+                smap_fn=lambda: run_agf(
+                    wb=wb,
+                    im_mates=im_mates,
+                    im_nonmates=im_nonmates,
+                    probe_im=probe_im,
+                    net_name=net_name,
+                    device=device
                 ),
                 probe_im=probe_im,
                 probe_info=probe_row,

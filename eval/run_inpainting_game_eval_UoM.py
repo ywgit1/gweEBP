@@ -50,10 +50,15 @@ if __name__ == '__main__':
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             'gweEBP',
-            'EBP',
-            'cEBP',
-            'tcEBP',
-            'GradCAM'
+            # 'EBP',
+            # 'cEBP',
+            # 'tcEBP',
+            # 'eEBP',
+            # 'ecEBP',
+            # 'etcEBP'
+            # 'GradCAM'
+            'AGF',
+            'cEBP'
             
         ],
         dest='METHOD',

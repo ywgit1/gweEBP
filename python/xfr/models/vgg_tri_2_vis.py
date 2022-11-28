@@ -146,7 +146,7 @@ def vgg16_preprocess():
 
 class VggEmbeddingNet(nn.Module):
    
-    def __init__(self):      
+    def __init__(self, vgg_tri_2_pth=None):      
         super(VggEmbeddingNet, self).__init__()             
         self.name = os.path.splitext(os.path.split(__file__)[1])[0]     
         self.reset()
@@ -181,59 +181,59 @@ class VggEmbeddingNet(nn.Module):
     
     
     def reset(self):
-         
-        self.basenet = Vgg_face_dag()
+        basenet = Vgg_face_dag()
+        
         layers_part1 = []
         layers_part2 = []
                 
-        layers_part1.append(self.basenet.conv1_1)
-        layers_part1.append(self.basenet.relu1_1)
-        layers_part1.append(self.basenet.conv1_2)
-        layers_part1.append(self.basenet.relu1_2)
-        layers_part1.append(self.basenet.pool1)
+        layers_part1.append(basenet.conv1_1)
+        layers_part1.append(basenet.relu1_1)
+        layers_part1.append(basenet.conv1_2)
+        layers_part1.append(basenet.relu1_2)
+        layers_part1.append(basenet.pool1)
         
-        layers_part1.append(self.basenet.conv2_1)
-        layers_part1.append(self.basenet.relu2_1)
-        layers_part1.append(self.basenet.conv2_2)
-        layers_part1.append(self.basenet.relu2_2)
-        layers_part1.append(self.basenet.pool2)
+        layers_part1.append(basenet.conv2_1)
+        layers_part1.append(basenet.relu2_1)
+        layers_part1.append(basenet.conv2_2)
+        layers_part1.append(basenet.relu2_2)
+        layers_part1.append(basenet.pool2)
         
-        layers_part1.append(self.basenet.conv3_1)
-        layers_part1.append(self.basenet.relu3_1)
-        layers_part1.append(self.basenet.conv3_2)
-        layers_part1.append(self.basenet.relu3_2)
-        layers_part1.append(self.basenet.conv3_3)
-        layers_part1.append(self.basenet.relu3_3)
+        layers_part1.append(basenet.conv3_1)
+        layers_part1.append(basenet.relu3_1)
+        layers_part1.append(basenet.conv3_2)
+        layers_part1.append(basenet.relu3_2)
+        layers_part1.append(basenet.conv3_3)
+        layers_part1.append(basenet.relu3_3)
         
         
-        layers_part2.append(self.basenet.pool3)
-        layers_part2.append(self.basenet.conv4_1)
-        layers_part2.append(self.basenet.relu4_1)
-        layers_part2.append(self.basenet.conv4_2)
-        layers_part2.append(self.basenet.relu4_2)
-        layers_part2.append(self.basenet.conv4_3)
-        layers_part2.append(self.basenet.relu4_3)
-        layers_part2.append(self.basenet.pool4)
+        layers_part2.append(basenet.pool3)
+        layers_part2.append(basenet.conv4_1)
+        layers_part2.append(basenet.relu4_1)
+        layers_part2.append(basenet.conv4_2)
+        layers_part2.append(basenet.relu4_2)
+        layers_part2.append(basenet.conv4_3)
+        layers_part2.append(basenet.relu4_3)
+        layers_part2.append(basenet.pool4)
         
-        layers_part2.append(self.basenet.conv5_1)
-        layers_part2.append(self.basenet.relu5_1)
-        layers_part2.append(self.basenet.conv5_2)
-        layers_part2.append(self.basenet.relu5_2)
-        layers_part2.append(self.basenet.conv5_3)
-        layers_part2.append(self.basenet.relu5_3)
-        layers_part2.append(self.basenet.pool5)  
+        layers_part2.append(basenet.conv5_1)
+        layers_part2.append(basenet.relu5_1)
+        layers_part2.append(basenet.conv5_2)
+        layers_part2.append(basenet.relu5_2)
+        layers_part2.append(basenet.conv5_3)
+        layers_part2.append(basenet.relu5_3)
+        layers_part2.append(basenet.pool5)  
         
         self.basenet_part1 = nn.Sequential(*layers_part1)
         self.basenet_part2 = nn.Sequential(*layers_part2)
 
         self.dropout = nn.Dropout(p=0.5) 
-        self.basenet.fc6 = nn.Identity()
-        self.basenet.relu6 = nn.Identity()
-        self.basenet.dropout6 = nn.Identity()
-        self.basenet.fc7 = nn.Identity()
-        self.basenet.relu7 = nn.Identity()
-        self.basenet.dropout7 = nn.Identity()
-        self.basenet.fc8 = nn.Identity()
+        # self.basenet.fc6 = nn.Identity()
+        # self.basenet.relu6 = nn.Identity()
+        # self.basenet.dropout6 = nn.Identity()
+        # self.basenet.fc7 = nn.Identity()
+        # self.basenet.relu7 = nn.Identity()
+        # self.basenet.dropout7 = nn.Identity()
+        # self.basenet.fc8 = nn.Identity()
 #        self.basenet.pool5 = nn.MaxPool2d(kernel_size=[3, 3], stride=[3, 3], 
 #                                          padding=0, dilation=1, ceil_mode=False)
          # stride [3,3] is to reduce the number of input features to the fc layer.
@@ -248,7 +248,7 @@ def get_model(vgg_tri_2_pth=None):
     Args:
         weights_path (str): If set, loads model weights from the given path
     """
-    model = VggEmbeddingNet()
+    model = VggEmbeddingNet(vgg_tri_2_pth)
     if vgg_tri_2_pth is not None:
         state_dict = torch.load(vgg_tri_2_pth)
         model.load_state_dict(state_dict['model_state_dict'], strict=False) # loads our own trained model

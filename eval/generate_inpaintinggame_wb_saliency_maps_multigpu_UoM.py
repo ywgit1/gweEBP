@@ -23,7 +23,6 @@ from xfr import inpaintgame2_dir
 from xfr import xfr_root
 from xfr import inpaintgame_saliencymaps_dir
 
-from create_wbnet import create_wbnet
 from xfr.utils import iterate_param_sets
 from xfr.utils import prune_unneeded_exports
 from xfr.utils import normalize_gpus
@@ -79,12 +78,20 @@ def run_experiment(params, params_export, gpu_queue):
         ebp_version = int(params['EBP_VER'][0])
         net_name = params['WB_NET'][0]
         
-        wb = create_wbnet(
-            net_name,
-            ebp_version=ebp_version,
-            ebp_subtree_mode=params['INIT_EBP_SUBTREE_MODE'][0],
-            device=device,
-        )
+        if params['method'][0].lower() == 'clrp':
+            from create_wbnet_clrp import create_wbnet
+            wb = create_wbnet(net_name, device=device) 
+        elif params['method'][0].lower() == 'agf':
+            from create_wbnet_agf import create_wbnet
+            wb = create_wbnet(net_name, device=device)
+        else:
+            from create_wbnet import create_wbnet
+            wb = create_wbnet(
+                net_name,
+                ebp_version=ebp_version,
+                ebp_subtree_mode=params['INIT_EBP_SUBTREE_MODE'][0],
+                device=device
+            )
         
         # net_param_package = (ebp_version, params['INIT_EBP_SUBTREE_MODE'][0], device)
         
@@ -111,6 +118,7 @@ def run_experiment(params, params_export, gpu_queue):
         success = True
         
         wb.to(torch.device("cpu"))
+        del wb.net
         del wb
         gc.collect()
 
@@ -292,9 +300,9 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['gweEBP'],
+        default=['agf'],
         type=str,
-        help='cEBP/tcEBP: cEBP; EBP: EBP; gradient weighted extended EBP: gweEBP',
+        help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; clrp: contrastive layered relevance propagation; agf: attribution guided factorization',
     )
 
     parser.add_argument(
