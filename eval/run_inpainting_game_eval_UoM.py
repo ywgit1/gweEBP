@@ -49,6 +49,11 @@ if __name__ == '__main__':
             # 'eEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
+            'GradCAM',
+            'PairwiseSIM',
+            'EBP',
+            'cEBP',
+            'tcEBP',
             'gweEBP',
             # 'EBP',
             # 'cEBP',
@@ -57,8 +62,9 @@ if __name__ == '__main__':
             # 'ecEBP',
             # 'etcEBP'
             # 'GradCAM'
-            'AGF',
-            'cEBP'
+            # 'AGF',
+            # 'RSP',
+            # 'cEBP'
             
         ],
         dest='METHOD',
@@ -121,7 +127,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'vgg16',
+            'lcnn9',
         ],
         dest='NET',
         help='network to analyze',

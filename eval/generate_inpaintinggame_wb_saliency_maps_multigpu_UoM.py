@@ -84,6 +84,9 @@ def run_experiment(params, params_export, gpu_queue):
         elif params['method'][0].lower() == 'agf':
             from create_wbnet_agf import create_wbnet
             wb = create_wbnet(net_name, device=device)
+        elif params['method'][0].lower() == 'rsp':
+            from create_wbnet_rsp import create_wbnet
+            wb = create_wbnet(net_name, device=device)
         else:
             from create_wbnet import create_wbnet
             wb = create_wbnet(
@@ -118,6 +121,7 @@ def run_experiment(params, params_export, gpu_queue):
         success = True
         
         wb.to(torch.device("cpu"))
+        del wb.net.net
         del wb.net
         del wb
         gc.collect()
@@ -300,7 +304,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['agf'],
+        default=['rsp'],
         type=str,
         help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; clrp: contrastive layered relevance propagation; agf: attribution guided factorization',
     )
