@@ -101,13 +101,13 @@ def create_wbnet(net_name, device):
         return wb
 
     elif net_name == 'lcnn9':
+        from xfr.models import lcnn9_rsp
         param_path = os.path.join(
             xfr_root, 'models/lcnn9_tri_Wed_06Oct2021_173415_epoch30.pth')
-        from xfr.models import lcnn9_tri
-        net = lcnn9_tri.get_model(param_path)
+        net = lcnn9_rsp.get_model(param_path)
         net.eval()
         net.to(device)
-        wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net)).to(device)
+        wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net), device=device).to(device)
 
         wb.match_threshold = 0.245
         wb.platts_scaling = 7.349339

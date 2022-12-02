@@ -107,6 +107,31 @@ def run_clrp(wb, im_mates, im_nonmates, probe_im, net_name, device):
     
     return img_saliency
     
+def run_cam(wb, im_mates, im_nonmates, probe_im, net_name, method, device):
+    x_mates = []   
+    wb.net.restore_emd_layer(device=device) # Restore the original embedding layer
+    for im in im_mates:
+        x_mate = wb.encode(wb.convert_from_numpy(im).to(device).requires_grad_(True)).detach()
+        x_mates.append(x_mate)
+    x_nonmates = []
+    for nm in im_nonmates:
+        x_nonmate = wb.encode(wb.convert_from_numpy(nm).to(device)).detach()
+        x_nonmates.append(x_nonmate)
+    avg_x_mate = torch.mean(torch.stack(x_mates), axis=0)
+    avg_x_mate /= torch.norm(avg_x_mate)
+    avg_x_nonmate = torch.mean(torch.stack(x_nonmates), axis=0)
+    avg_x_nonmate /= torch.norm(avg_x_nonmate)
+    img_probe = wb.convert_from_numpy(probe_im).to(device)
+    x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
+    wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
+    target_layer = None
+    if 'LightCNN9' in str(wb.net):
+        target_layer = wb.net.net.features_part2[-2]
+    elif 'VGG16' in str(wb.net):
+        target_layer = wb.net.net.basenet_part2[-6]
+    img_saliency = wb.CAM(img_probe, method, target_layers=[target_layer])
+    
+    return img_saliency
 
 def run_agf(wb, im_mates, im_nonmates, probe_im, net_name, device):
     x_mates = []   
@@ -125,8 +150,12 @@ def run_agf(wb, im_mates, im_nonmates, probe_im, net_name, device):
     img_probe = wb.convert_from_numpy(probe_im).to(device)
     x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
     wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
-    
-    img_saliency = wb.AGF(img_probe)
+    i_layer = -4
+    if 'LightCNN9' in str(wb.net):
+        i_layer = -5
+    elif 'VGG16' in str(wb.net):
+        i_layer = -9
+    img_saliency = wb.AGF(img_probe, i_layer=i_layer)
     
     return img_saliency    
    
@@ -147,7 +176,13 @@ def run_rsp(wb, im_mates, im_nonmates, probe_im, net_name, device):
     img_probe = wb.convert_from_numpy(probe_im).to(device)
     x_probe = wb.encode(img_probe) # Set net.fc.indicator properly
     wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
-    
+    i_layer = 0; gradcam_layer = 0
+    if 'LightCNN9' in str(wb.net):
+        i_layer = -12; gradcam_layer = 29 
+    elif 'VGG16' in str(wb.net):
+        i_layer = -6; gradcam_layer = 29
+    else:
+        raise ValueError(f'{str(wb.net)} net type not supported')
     img_saliency = wb.RSP(img_probe)
     
     return img_saliency 
@@ -1023,6 +1058,27 @@ def generate_wb_smaps(
                 mask_id=mask_id,
             )
 
+        if 'cam' in method.lower():
+            fn = method
+            result_calculated = True
+            create_save_smap(
+                fn,
+                output_dir, overwrite,
+                smap_fn=lambda: run_cam(
+                    wb=wb,
+                    im_mates=im_mates,
+                    im_nonmates=im_nonmates,
+                    probe_im=probe_im,
+                    net_name=net_name,
+                    method=method,
+                    device=device
+                ),
+                probe_im=probe_im,
+                probe_info=probe_row,
+                mask_im=mask_im,
+                mask_id=mask_id,
+            )            
+            
         if method is None or method.lower() == 'agf':
             result_calculated = True
             fn = 'AGF'

@@ -55,7 +55,7 @@ def run_experiment(params, params_export, gpu_queue):
             device = torch.device("cpu")
             # print("Running on CPU")
         
-        device = torch.device("cpu") # Force running on CPU
+        # device = torch.device("cpu") # Force running on CPU
         
         params['EXPER_DIR'] = (  # output directory
             'Note_20211029_Masks_for_Inpainting/' +
@@ -86,6 +86,9 @@ def run_experiment(params, params_export, gpu_queue):
             wb = create_wbnet(net_name, device=device)
         elif params['method'][0].lower() == 'rsp':
             from create_wbnet_rsp import create_wbnet
+            wb = create_wbnet(net_name, device=device)
+        elif 'cam' in params['method'][0].lower():
+            from create_wbnet_cam import create_wbnet
             wb = create_wbnet(net_name, device=device)
         else:
             from create_wbnet import create_wbnet
@@ -304,9 +307,13 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['rsp'],
+        default=['ablationcam'],
         type=str,
-        help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; clrp: contrastive layered relevance propagation; agf: attribution guided factorization',
+        help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; '\
+            'clrp: contrastive layered relevance propagation; '\
+            'agf: attribution guided factorization; '\
+            'rsp: relative sectional propagation; '\
+            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam: CAM related methods'
     )
 
     parser.add_argument(
