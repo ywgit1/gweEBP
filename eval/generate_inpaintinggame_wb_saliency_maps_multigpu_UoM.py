@@ -87,7 +87,10 @@ def run_experiment(params, params_export, gpu_queue):
         elif params['method'][0].lower() == 'rsp':
             from create_wbnet_rsp import create_wbnet
             wb = create_wbnet(net_name, device=device)
-        elif 'cam' in params['method'][0].lower():
+        elif 'sess' in params['method'][0].lower():
+            from create_wbnet_sess import create_wbnet
+            wb = create_wbnet(net_name, device=device)
+        elif 'cam' in params['method'][0].lower() or params['method'][0].lower() == 'fullgrad':
             from create_wbnet_cam import create_wbnet
             wb = create_wbnet(net_name, device=device)
         else:
@@ -307,13 +310,14 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['ablationcam'],
+        default=['gradcam+sess'],
         type=str,
         help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; '\
             'clrp: contrastive layered relevance propagation; '\
             'agf: attribution guided factorization; '\
             'rsp: relative sectional propagation; '\
-            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam: CAM related methods'
+            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam/fullgrad/hirescam/layercam: CAM related methods;'\
+            'gradcam+sess/scorecam+sess/groupcam+sess: SESS enhanced CAM methods'
     )
 
     parser.add_argument(
@@ -341,7 +345,7 @@ if __name__ == '__main__':
         help='restrict processing to specific masks, zero padded',
     )
     parser.add_argument('--net', nargs='+',
-                        default=['vgg16'],
+                        default=['lcnn9'],
                         dest='WB_NET')
 
     parser.add_argument(

@@ -3,7 +3,7 @@ import torch
 import sys
 import xfr
 from xfr import xfr_root
-from xfr.models import whitebox_rsp as whitebox 
+from xfr.models import whitebox_sess as whitebox 
 from xfr.models import resnet
 import warnings
 
@@ -73,11 +73,11 @@ def create_wbnet(net_name, device):
         return wb
     
     elif net_name == 'vgg16':
-        from xfr.models import vgg_rsp
+        from xfr.models import vgg_cam
         param_path = os.path.join(
             xfr_root, 'models/vgg_tri_2_Mon_11Oct2021_221223_epoch30.pth')
 
-        net = vgg_rsp.get_model(param_path)
+        net = vgg_cam.get_model(param_path)
         net.to(device)
         wb = whitebox.Whitebox(whitebox.WhiteboxVGG16(net), device=device).to(device)
 
@@ -87,11 +87,11 @@ def create_wbnet(net_name, device):
         return wb        
 
     elif net_name == 'CUHK-vgg16':
-        from xfr.models import vgg_rsp
+        from xfr.models import vgg_cam
         param_path = os.path.join(
             xfr_root, 'models/vgg_tri_2_vis_202111301013_epoch29.pth')
 
-        net = vgg_rsp.get_model(param_path)
+        net = vgg_cam.get_model(param_path)
         net.to(device)
         wb = whitebox.Whitebox(whitebox.WhiteboxVGG16(net), device=device).to(device)
 
@@ -101,10 +101,10 @@ def create_wbnet(net_name, device):
         return wb
 
     elif net_name == 'lcnn9':
-        from xfr.models import lcnn9_rsp
         param_path = os.path.join(
             xfr_root, 'models/lcnn9_tri_Wed_06Oct2021_173415_epoch30.pth')
-        net = lcnn9_rsp.get_model(param_path)
+        from xfr.models import lcnn9_cam
+        net = lcnn9_cam.get_model(param_path)
         net.eval()
         net.to(device)
         wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net), device=device).to(device)
@@ -117,8 +117,8 @@ def create_wbnet(net_name, device):
     elif net_name == 'CUHK-lcnn9':
         param_path = os.path.join(
             xfr_root, 'models/lcnn9_tri_bestacc.pth')
-        from xfr.models import lcnn9_rsp
-        net = lcnn9_rsp.get_model(param_path)
+        from xfr.models import lcnn9_cam
+        net = lcnn9_cam.get_model(param_path)
         net.eval()
         net.to(device)
         wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net), device=device).to(device)

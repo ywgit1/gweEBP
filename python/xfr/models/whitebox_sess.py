@@ -25,18 +25,8 @@ from xfr.models.lightcnn import lightcnn_preprocess, lightcnn_preprocess_fbai
 import xfr.models.lightcnn
 from xfr.models.vgg_agf import vgg16_preprocess
 from xfr import utils
-from xfr.models.pytorch_grad_cam import GradCAM, \
-    HiResCAM, \
-    ScoreCAM, \
-    GradCAMPlusPlus, \
-    AblationCAM, \
-    XGradCAM, \
-    EigenCAM, \
-    EigenGradCAM, \
-    LayerCAM, \
-    FullGrad, \
-    GradCAMElementWise
-from xfr.models.pytorch_grad_cam import model_targets
+from xfr.models.SESS.sess import SESS
+from xfr.models.SESS.cam import GradCAM, CAM, ScoreCAM, GroupCAM
 
 class WhiteboxNetwork(object):
     def __init__(self, net):
@@ -577,48 +567,42 @@ class Whitebox(nn.Module):
             imT = self.convert_from_numpy(im)
             yield im, imT[0], fn
             
-    def CAM(self, img_probe, method, target_layers, **kwargs):
+    def SESS(self, img_probe, method, target_layers, **kwargs):
         x = img_probe.detach().clone()
         y = self.net.classify(x.requires_grad_(True)).detach().cpu().numpy() # Obtain non-negative activations in a forward pass A_{n}
         assert np.all(y[:, 0] > y[:, 1])
-
-        methods = \
-            {"gradcam": GradCAM,
-             "hirescam": HiResCAM,
-             "scorecam": ScoreCAM,
-             "gradcam++": GradCAMPlusPlus,
-             "ablationcam": AblationCAM,
-             "xgradcam": XGradCAM,
-             "eigencam": EigenCAM,
-             "eigengradcam": EigenGradCAM,
-             "layercam": LayerCAM,
-             "fullgrad": FullGrad,
-             "gradcamelementwise": GradCAMElementWise}
-
-        use_cuda = 'cuda' in str(self.device)
+        
+        methods = {
+            'gradcam': GradCAM,
+            'scorecam': ScoreCAM,
+            'groupcam': GroupCAM
+            }
+        
         cam_algorithm = methods[method]
-        targets = [model_targets.EmbeddingNetTripletGainTarget()]
         
-        with cam_algorithm(model=self.net.net,
-                           target_layers=target_layers,
-                           use_cuda=use_cuda) as cam:
-
-            # AblationCAM and ScoreCAM have batched implementations.
-            # You can override the internal batch size for faster computation.
-            cam.batch_size = 32
-            aug_smooth = False; eigen_smooth = False
-            if 'aug_smooth' in kwargs:
-                aug_smooth = kwargs['aug_smooth']
-            if 'eigen_smooth' in kwargs:
-                eigen_smooth = kwargs['eigen_smooth']
-            grayscale_cam = cam(input_tensor=x,
-                                targets=targets,
-                                aug_smooth=aug_smooth,
-                                eigen_smooth=eigen_smooth)
-
-            # Here grayscale_cam has only one image in the batch
-            smap = grayscale_cam[0, :]
-        
+        cam = cam_algorithm(self.net.net, target_layer=target_layers[0])
+        num_scales = 12
+        imsiz = img_probe.shape[3]
+        scales = [imsiz + 64 * i for i in range(num_scales)]
+        pre_filter_ratio = 0
+        theta = 0
+        step_size = imsiz
+        sess = SESS(cam, pre_filter_ratio=pre_filter_ratio,
+                    theta=theta,
+                    pool='mean',
+                    window_size=imsiz,
+                    step_size=step_size,
+                    min_overlap_ratio=1,
+                    scales=scales,
+                    requires_grad=False,
+                    output=None,
+                    verbose=1,
+                    smooth=True)
+        target_cls_id = 0
+        smap_mate, idx = sess(img_probe, target_cls_id)
+        target_cls_id = 1
+        smap_nonmate, idx = sess(img_probe, target_cls_id)
+        smap = np.maximum(0, smap_mate - smap_nonmate)
         smap = self._to_saliency(smap)
         smap = np.array(PIL.Image.fromarray(smap).resize((img_probe.shape[3], img_probe.shape[2])))
         return smap

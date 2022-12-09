@@ -87,13 +87,13 @@ def create_wbnet(net_name, device):
         return wb        
 
     elif net_name == 'CUHK-vgg16':
-        from xfr.models import vgg_tri_2_vis
+        from xfr.models import vgg_cam
         param_path = os.path.join(
             xfr_root, 'models/vgg_tri_2_vis_202111301013_epoch29.pth')
 
-        net = vgg_tri_2_vis.get_model(param_path)
+        net = vgg_cam.get_model(param_path)
         net.to(device)
-        wb = whitebox.Whitebox(whitebox.WhiteboxVGG16(net)).to(device)
+        wb = whitebox.Whitebox(whitebox.WhiteboxVGG16(net), device=device).to(device)
 
         wb.match_threshold = 0.06 # @ FPR=0.15
         wb.platts_scaling = -2.042301
@@ -103,7 +103,7 @@ def create_wbnet(net_name, device):
     elif net_name == 'lcnn9':
         param_path = os.path.join(
             xfr_root, 'models/lcnn9_tri_Wed_06Oct2021_173415_epoch30.pth')
-        from xfr.models import lcnn9_tri as lcnn9_cam
+        from xfr.models import lcnn9_cam
         net = lcnn9_cam.get_model(param_path)
         net.eval()
         net.to(device)
@@ -117,11 +117,11 @@ def create_wbnet(net_name, device):
     elif net_name == 'CUHK-lcnn9':
         param_path = os.path.join(
             xfr_root, 'models/lcnn9_tri_bestacc.pth')
-        from xfr.models import lcnn9_tri
-        net = lcnn9_tri.get_model(param_path)
+        from xfr.models import lcnn9_cam
+        net = lcnn9_cam.get_model(param_path)
         net.eval()
         net.to(device)
-        wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net)).to(device)
+        wb = whitebox.Whitebox(whitebox.WhiteboxLightCNN9(net), device=device).to(device)
 
         wb.match_threshold = 0.645
         wb.platts_scaling = -2.512507

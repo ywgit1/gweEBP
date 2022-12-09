@@ -1,4 +1,6 @@
 def replace_layer_recursive(model, old_layer, new_layer):
+    if model is None:
+        return False
     for name, layer in model._modules.items():
         if layer == old_layer:
             model._modules[name] = new_layer

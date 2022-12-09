@@ -182,8 +182,9 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
         self.fc_b = model_weights[-3]
         
     def restore_emd_layer(self):
+        device = next(self.net.parameters()).device
         from xfr.models.lightcnn import mfm
-        self.net.fc = mfm(8*8*128, 256, type=0)
+        self.net.fc = mfm(8*8*128, 256, type=0).to(device)
         self.net.fc.filter.weight = nn.Parameter(self.fc_w)
         self.net.fc.filter.bias = nn.Parameter(self.fc_b)
         
@@ -220,8 +221,8 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
 
     def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
         # <editor-fold desc="[+] Original implementation ..."> # not merge layer
-        
-        self.net.fc2 = nn.Linear(256, 2, bias=False)
+        device = next(self.net.parameters()).device
+        self.net.fc2 = nn.Linear(256, 2, bias=False).to(device)
         self.net.fc2.weight.data.copy_(torch.cat( (x_mate, x_nonmate), dim=0) / self.net.emd_norm)
         
         # </editor-fold>
@@ -229,10 +230,10 @@ class WhiteboxLightCNN9(WhiteboxNetwork):
         indicator = self.net.fc.indicator
         fc_weight = self.net.fc.filter.weight
         fc_bias = self.net.fc.filter.bias
-        r = torch.range(0, 255)
+        r = torch.range(0, 255).to(device)
         index = (1 - indicator) * r + indicator * (r + 256)
         index = index.long()
-        self.net.fc = nn.Linear(fc_weight.shape[1], 256, bias=True)
+        self.net.fc = nn.Linear(fc_weight.shape[1], 256, bias=True).to(device)
         self.net.fc.weight.data.copy_(fc_weight[index, :])
         self.net.fc.bias.data.copy_(fc_bias[index])
 
@@ -851,8 +852,9 @@ class Whitebox(nn.Module):
             self.X_np.append(X_np)
             X_nn = self.X_nn.pop(0)
             self.X_nn.append(X_nn)
-            dA = self.gradlist.pop(0)
-            self.gradlist.append(dA)
+            if self.gradlist is not None and len(self.gradlist) > 0:
+                dA = self.gradlist.pop(0)
+                self.gradlist.append(dA)
 
             # Affine layers only
             if 'pos_weight' in self._ebp_ext_mode and hasattr(module, 'pos_weight'):     

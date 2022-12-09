@@ -20,9 +20,8 @@ sys.path.append('../python')
 import xfr
 
 from xfr import inpaintgame3_dir
-from xfr import xfr_root
-from xfr import inpaintgame_CUHK_saliencymaps_dir
 
+from create_wbnet import create_wbnet
 from xfr.utils import iterate_param_sets
 from xfr.utils import prune_unneeded_exports
 from xfr.utils import normalize_gpus
@@ -55,7 +54,7 @@ def run_experiment(params, params_export, gpu_queue):
             device = torch.device("cpu")
             # print("Running on CPU")
         
-        # device = torch.device("cpu") # Force running on CPU
+        device = torch.device("cpu") # Force running on CPU
         
         params['EXPER_DIR'] = (  # output directory
             'Note_20211029_Masks_for_Inpainting/' +
@@ -78,29 +77,12 @@ def run_experiment(params, params_export, gpu_queue):
         ebp_version = int(params['EBP_VER'][0])
         net_name = params['WB_NET'][0]
         
-        if params['method'][0].lower() == 'clrp':
-            from create_wbnet_clrp import create_wbnet
-            wb = create_wbnet(net_name, device=device) 
-        elif params['method'][0].lower() == 'agf':
-            from create_wbnet_agf import create_wbnet
-            wb = create_wbnet(net_name, device=device)
-        elif params['method'][0].lower() == 'rsp':
-            from create_wbnet_rsp import create_wbnet
-            wb = create_wbnet(net_name, device=device)
-        elif 'sess' in params['method'][0].lower():
-            from create_wbnet_sess import create_wbnet
-            wb = create_wbnet(net_name, device=device)
-        elif 'cam' in params['method'][0].lower() or params['method'][0].lower() == 'fullgrad':
-            from create_wbnet_cam import create_wbnet
-            wb = create_wbnet(net_name, device=device)
-        else:
-            from create_wbnet import create_wbnet
-            wb = create_wbnet(
-                net_name,
-                ebp_version=ebp_version,
-                ebp_subtree_mode=params['INIT_EBP_SUBTREE_MODE'][0],
-                device=device
-            )
+        wb = create_wbnet(
+            net_name,
+            ebp_version=ebp_version,
+            ebp_subtree_mode=params['INIT_EBP_SUBTREE_MODE'][0],
+            device=device,
+        )
         
         if params['EBP_SUBTREE_MODE_WEIGHTED'][0] is None:
             if 'resnet' in net_name:
@@ -123,8 +105,6 @@ def run_experiment(params, params_export, gpu_queue):
         success = True
         
         wb.to(torch.device("cpu"))
-        del wb.net.net
-        del wb.net
         del wb
         gc.collect()
 
@@ -275,7 +255,7 @@ def run_experiments(params):
                 ntp = ntp + run_experiment(_params_, params_export_, gpu_queue)[2]
                 
         print('{}'.format(ntp / ntotal))
-        
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(
@@ -306,30 +286,21 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['eEBP'],
+        default=['gweEBP'],
         type=str,
-        help='cEBP: contrastive EBP and truncated cEBP; '\
-            'EBP: EBP; '\
-            'eEBP: extended EBP; '\
-            'ecEBP: extended cEBP/tcEBP;'\
-            'gweEBP: gradient weighted extended EBP; '\
-            'clrp: contrastive layered relevance propagation; '\
-            'agf: attribution guided factorization; '\
-            'rsp: relative sectional propagation; '\
-            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam/fullgrad/hirescam/layercam: CAM related methods;'\
-            'gradcam+sess/scorecam+sess/groupcam+sess: SESS enhanced CAM methods'
-            
+        help='restrict processing to specific subjects',
     )
 
     parser.add_argument(
         '--ebp-ver', nargs='+', dest='EBP_VER',
-        default=['6'],
+        default=['8'],
         help='EBP version to use (leave as default)',
         )
     parser.add_argument(
         '--init-ebp-subtree-mode', nargs='+',
         dest='INIT_EBP_SUBTREE_MODE',
         default=['affineonly'],
+        # default=['affineonly_with_prior'],
         help='EBP subtree mode used in whitebox constructor.',
     )
     parser.add_argument(
@@ -366,11 +337,6 @@ if __name__ == '__main__':
         default=None,
         help='override the single-gpu script to call (advanced)',
     )
-    # parser.add_argument(
-    #     '--merge-layers',
-    #     dest='merge_layers',
-    #     action='store_true',
-    #     help='whether to merge the triplet classification layer with the last FC layer')
 
     args = parser.parse_args()
     args.gpus = [int(x) for x in args.gpus]

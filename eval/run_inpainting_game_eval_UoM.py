@@ -65,7 +65,10 @@ if __name__ == '__main__':
             # 'etcEBP'
             
             # 'GradCAM',
-            'AblationCAM'
+            # 'AblationCAM',
+            # 'LayerCAM',
+            # 'HiResCAM',
+            # 'EigenCAM',
             #'AGF',
             # 'RSP',
             # 'cEBP'
@@ -131,7 +134,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'vgg16',
+            'lcnn9',
         ],
         dest='NET',
         help='network to analyze',
