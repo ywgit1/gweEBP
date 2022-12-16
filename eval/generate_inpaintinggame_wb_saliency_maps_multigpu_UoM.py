@@ -310,7 +310,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['gradcam+sess'],
+        default=['layercam'],
         type=str,
         help='cEBP/tcEBP: cEBP; EBP: EBP; gweEBP: gradient weighted extended EBP; '\
             'clrp: contrastive layered relevance propagation; '\

@@ -584,7 +584,7 @@ def plot_cls_vs_fpr(ax, grp, hnet, label,
             ylabel='Classified as Inpainted Non-mate',
         )
     ax.set(
-        xscale='symlog',
+        # xscale='symlog',
         xlabel='False Alarm Rate',
         xlim=(0,100),
     )
@@ -594,7 +594,17 @@ def plot_cls_vs_fpr(ax, grp, hnet, label,
     ax.yaxis.set_major_formatter(plt.FuncFormatter(tickformatter))
 
     ax.legend() # loc='upper center', bbox_to_anchor=(0.5, -0.1))
-    return line, cls_at_fpr
+    
+    # Calculate AUC
+    auc = 0
+    for i in range(1, cls_as_nonmate.shape[0]):
+        y0, x0 = cls_as_nonmate[i - 1], fpr[i - 1]
+        y1, x1 = cls_as_nonmate[i], fpr[i]
+        assert x1 >= x0
+        auc += (y0 + y1) * (x1 - x0) / 2
+    auc += (y1 + 1) * (1 - x1) / 2
+        
+    return line, cls_at_fpr, auc
 
 def method_label_and_idx(method, methods, human_net_labels, net=None):
     if net is not None:
@@ -1331,6 +1341,8 @@ def generate_plots(nonmate_classification, hgame_thresholds, hgame_percentile,
 
     cls_at_fpr_method = dict() # nonmate cls. rate @ fpr across all masks
     lines = []
+    method_auc = []
+    
     for (method, suffix_aggr, net), grp in nonmate_classification.groupby(
         ['METHOD', 'SUFFIX_AGGR', 'NET'], sort=False
     ):
@@ -1354,13 +1366,17 @@ def generate_plots(nonmate_classification, hgame_thresholds, hgame_percentile,
                         leftmost=(ni==0))
         # axes4[0,ni].legend(loc='upper center', bbox_to_anchor=(0.5, -0.16))
 
-        plot_cls_vs_fpr(axes4s[0, ni], grp, simplified_hnet,
+        _, _, auc = plot_cls_vs_fpr(axes4s[0, ni], grp, simplified_hnet,
                         slabel,
                         method_idx=method_idx,
                         balance_masks=balance_masks,
                         leftmost=(ni==0))
+        method_auc_row = OrderedDict()
+        method_auc_row['method'] = method
+        method_auc_row['auc'] = auc
+        method_auc.append(method_auc_row)        
         if ni == 0:
-            line, cls_at_fpr = plot_cls_vs_fpr(axesL[0, ni], grp, hnet,
+            line, cls_at_fpr, _ = plot_cls_vs_fpr(axesL[0, ni], grp, hnet,
                                 slabel,
                                 method_idx=method_idx,
                                 balance_masks=balance_masks,
@@ -1371,6 +1387,9 @@ def generate_plots(nonmate_classification, hgame_thresholds, hgame_percentile,
             axesL[0,ni].legend(loc='center')
             axesL[0,ni].axis('off')
 
+    csv_results = pd.DataFrame(method_auc)
+    csv_results.to_csv(os.path.join(output_dir, f'auc_{hnet}_CUHK.csv'), index=False)
+    
     fig4s.subplots_adjust(top=0.95, bottom=0.1, left=0.15, right=0.96, hspace=0.9, wspace=0.05)
     show.savefig(
         'inpainted_twin_game_%s-net-split_simplified.pdf' %
@@ -1437,7 +1456,7 @@ def generate_plots(nonmate_classification, hgame_thresholds, hgame_percentile,
             )
 
             ni = 0
-            _, cls_at_fpr = plot_cls_vs_fpr(
+            _, cls_at_fpr, _ = plot_cls_vs_fpr(
                 axes4s[0, ni], grp, None, slabel,
                 method_idx=method_idx,
                 balance_masks=balance_masks, leftmost=(ni==0))

@@ -306,7 +306,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['eEBP'],
+        default=['layercam'],
         type=str,
         help='cEBP: contrastive EBP and truncated cEBP; '\
             'EBP: EBP; '\

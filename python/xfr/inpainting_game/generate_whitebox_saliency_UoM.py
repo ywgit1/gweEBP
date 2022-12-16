@@ -163,9 +163,9 @@ def run_cam(wb, im_mates, im_nonmates, probe_im, net_name, method, device):
         if method.lower() == 'gradcam':
             target_layer = wb.net.net.features[-2]
         else:
-            target_layer = wb.net.net.features[-11]
+            target_layer = wb.net.net.features[-14]
     elif 'VGG16' in str(wb.net):
-        target_layer = wb.net.net.basenet_part2[-6]
+        target_layer = wb.net.net.basenet_part1[-8] #-8
     img_saliency = wb.CAM(img_probe, method, target_layers=[target_layer])
     
     return img_saliency
@@ -283,7 +283,18 @@ def run_contrastive_triplet_ebp(wb, im_mates, im_nonmates, probe_im,
         img_saliency = wb.truncated_contrastive_ebp(
             img_probe, k_poschannel=0, k_negchannel=1,
             percentile=truncate_percent, k_mwp=k_mwp)
-
+        
+    # # Save contrastive activation map
+    # from xfr.show import processSaliency, blend_saliency_map
+    # import imageio
+    # for i, A in enumerate(A_list):
+    #     A -= A.min()
+    #     A /= A.sum()
+    #     # Save saliency map
+    #     A = processSaliency(probe_im, A)
+    #     overlay = blend_saliency_map(probe_im, A)
+    #     imageio.imwrite(f'acm{i}.png', (overlay*255).astype(np.uint8))
+        
     wb.layerlist.pop(-1)
     wb.layerlist.pop(-1)
     # print("Returning Contrastive EBP")
@@ -554,15 +565,25 @@ def run_gradient_weighted_eEBP(wb, im_mates, im_nonmates, probe_im,
     if 'LightCNN9' in str(wb.net):
         K = 12
         k_mwp = 10
-    elif 'VGG16' in str(wb.net):
+    elif 'VGG16' in str(wb.net): # K = 9, k_mwp = 8
         K = 9
         k_mwp = 8
 
-    img_saliency = wb.gradient_weighted_eEBP(
+    img_saliency, A_list = wb.gradient_weighted_eEBP(
         img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
 
     wb.layerlist.pop(-1)
     wb.layerlist.pop(-1)
+    
+    # from xfr.show import processSaliency, blend_saliency_map
+    # import imageio
+    # for i, A in enumerate(A_list):
+    #     A -= A.min()
+    #     A /= A.sum()
+    #     # Save saliency map
+    #     A = processSaliency(probe_im, A)
+    #     overlay = blend_saliency_map(probe_im, A)
+    #     imageio.imwrite(f'acm{i}.png', (overlay*255).astype(np.uint8))
     
     # print("Returning Contrastive EBP")
     return img_saliency

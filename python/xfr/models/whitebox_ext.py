@@ -287,7 +287,8 @@ class WhiteboxVGG16(WhiteboxNetwork):
         self.fc_b = model_weights[-2]
 
     def restore_emd_layer(self):
-        self.net.fc = nn.Linear(25088, 1024)
+        device = next(self.net.parameters()).device
+        self.net.fc = nn.Linear(25088, 1024).to(device)
         self.net.fc.weight.data.copy_(self.fc_w)
         self.net.fc.bias.data.copy_(self.fc_b)
 
@@ -343,8 +344,8 @@ class WhiteboxVGG16(WhiteboxNetwork):
         
     def set_triplet_classifier(self, x_probe, x_mate, x_nonmate):
         # <editor-fold desc="[+] Original implementation ..."> # not merge layer
-        
-        self.net.fc2 = nn.Linear(1024, 2, bias=False)
+        device = next(self.net.parameters()).device
+        self.net.fc2 = nn.Linear(1024, 2, bias=False).to(device)
         self.net.fc2.weight.data.copy_(torch.cat( (x_mate, x_nonmate), dim=0) / self.net.emd_norm)
     
 
@@ -736,7 +737,7 @@ class Whitebox(nn.Module):
                 A = tuple([pa + na for pa, na in zip(posA, negA)])
                 self.A.append(A)
                 self.posA.append(posA)
-                self.negA.append(negA)
+                self.negA.append(negA)                  
             else:
                 self.A.append(tuple([x.detach().clone() for x in x_input]))
                 self.posA.append(tuple([F.relu(x.detach().clone()) for x in x_input]))
@@ -756,8 +757,10 @@ class Whitebox(nn.Module):
         elif self._ebp_mode == 'ebp':
             # Excitation backprop: https://arxiv.org/pdf/1608.00507.pdf, Algorithm 1, pg 9
             A = self.posA.pop(0)  # A_{n}: An input, pre-computed in "activation" mode
+            self.posA.append(A)
             X = self.X.pop(0)  # X_{n} = W^{+T}A_{n+1}, (Alg. 1, step 2), pre-computed in "positive activation" mode
-
+            self.X.append(X)
+            
             # Affine layers only
             if hasattr(module, 'pm_pos_weight'):
                 module.orig_weight = module.weight.detach().clone()
@@ -1264,19 +1267,26 @@ class Whitebox(nn.Module):
         self._ebp_mode2 = 'pm' # probe is matched to mate
         self.ebp(img_probe, P0, k_mwp)
         P_mate = self.P
-
+        A_mate = self.posA
+        
         # Non-mated EBP
         P0 = torch.zeros( (1, self.net.num_classes()) );  P0[0][k_negchannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pn' # probe is matched to non-mate
         self.ebp(img_probe, P0, k_mwp)
         P_nonmate = self.P
+        A_nonmate = self.posA
         
-        # Contrastive EBP
-        # if 'LightCNN9' in str(self.net):
-        #     k_mwp = 10
-        # elif 'VGG16' in str(self.net):
-        #     k_mwp = 8
+        # # Save activation map
+        # A_list = []
+        # for i in range(-3, -10, -1):
+        #     A = A_mate[i][0]
+        #     A = A / torch.sum(A) 
+        #     A = np.squeeze(np.sum(A.detach().cpu().numpy(), axis=1)).astype(np.float32)
+        #     A = np.array(PIL.Image.fromarray(A).resize((img_probe.shape[3], img_probe.shape[2])))
+        #     A = self._mwp_to_saliency(A)
+        #     A_list.append(A)
+            
         self._ebp_mode2 = None
         mwp_mate = P_mate[k_mwp] / torch.sum(P_mate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
         mwp_nonmate = P_nonmate[k_mwp] / torch.sum(P_nonmate[k_mwp]) # -2: MWP of the first conv. layer, 2: MWP of the last conv. layer
@@ -1290,7 +1300,7 @@ class Whitebox(nn.Module):
         assert (k_negchannel >= 0 and k_negchannel < self.net.num_classes())
 
         # Mated EBP
-        P0 = torch.zeros((1, self.net.num_classes()));
+        P0 = torch.zeros((1, self.net.num_classes()))
         P0[0][k_poschannel] = 1.0;  # one-hot
         P0 = P0.to(img_probe.device)
         self._ebp_mode2 = 'pm'
@@ -1546,7 +1556,18 @@ class Whitebox(nn.Module):
         P = np.squeeze(np.sum(P.detach().cpu().numpy(), axis=1)).astype(np.float32) 
         P = np.array(PIL.Image.fromarray(P).resize((img_probe.shape[3], img_probe.shape[2])))
         P = self._mwp_to_saliency(P)
-        return P  
+        
+        # # Save activation map
+        A_list = []
+        # for i in range(-3, -10, -1):
+        #     A = self.posA[i][0]
+        #     A = A / torch.sum(A) 
+        #     A = np.squeeze(np.sum(A.detach().cpu().numpy(), axis=1)).astype(np.float32) 
+        #     A = np.array(PIL.Image.fromarray(A).resize((img_probe.shape[3], img_probe.shape[2])))
+        #     A = self._mwp_to_saliency(A)
+        #     A_list.append(A)
+            
+        return P, A_list  
     
     def gradient_weighted_ecEBP(self, img_probe, x_mate, x_nonmate, k_poschannel, k_negchannel, K=None, k_mwp=-2):
         assert(k_poschannel >= 0 and k_poschannel < self.net.num_classes())

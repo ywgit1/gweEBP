@@ -163,9 +163,9 @@ def run_cam(wb, im_mates, im_nonmates, probe_im, net_name, method, device):
         if method.lower() == 'gradcam':
             target_layer = wb.net.net.features[-2]
         else:
-            target_layer = wb.net.net.features[-11] #-11
+            target_layer = wb.net.net.features[-14] #-11
     elif 'VGG16' in str(wb.net):
-        target_layer = wb.net.net.basenet_part2[-6]
+        target_layer = wb.net.net.basenet_part2[-8]
     img_saliency = wb.CAM(img_probe, method, target_layers=[target_layer])
     
     return img_saliency
