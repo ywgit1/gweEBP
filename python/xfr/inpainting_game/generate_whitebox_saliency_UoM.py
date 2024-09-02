@@ -160,12 +160,15 @@ def run_cam(wb, im_mates, im_nonmates, probe_im, net_name, method, device):
     wb.net.set_triplet_classifier(x_probe, avg_x_mate, avg_x_nonmate)
     target_layer = None
     if 'LightCNN9' in str(wb.net):
-        if method.lower() == 'gradcam':
+        if method.lower() in ['gradcam', 'fdcam']:
             target_layer = wb.net.net.features[-2]
         else:
             target_layer = wb.net.net.features[-14]
     elif 'VGG16' in str(wb.net):
-        target_layer = wb.net.net.basenet_part1[-8] #-8
+        if method.lower() in ['gradcam', 'fdcam']:
+            target_layer = wb.net.net.basenet_part2[-2]
+        else:        
+            target_layer = wb.net.net.basenet_part2[-8] #-8
     img_saliency = wb.CAM(img_probe, method, target_layers=[target_layer])
     
     return img_saliency
