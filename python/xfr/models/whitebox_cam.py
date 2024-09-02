@@ -35,7 +35,8 @@ from xfr.models.pytorch_grad_cam import GradCAM, \
     EigenGradCAM, \
     LayerCAM, \
     FullGrad, \
-    GradCAMElementWise
+    GradCAMElementWise, \
+    FDCAM
 from xfr.models.pytorch_grad_cam import model_targets
 
 class WhiteboxNetwork(object):
@@ -593,11 +594,14 @@ class Whitebox(nn.Module):
              "eigengradcam": EigenGradCAM,
              "layercam": LayerCAM,
              "fullgrad": FullGrad,
-             "gradcamelementwise": GradCAMElementWise}
+             "gradcamelementwise": GradCAMElementWise,
+             'fdcam': FDCAM }
 
         use_cuda = 'cuda' in str(self.device)
         cam_algorithm = methods[method]
         targets = [model_targets.EmbeddingNetTripletGainTarget()]
+        if method == 'fdcam':
+            targets = [model_targets.ClassifierOutputTarget(0)]
         
         with cam_algorithm(model=self.net.net,
                            target_layers=target_layers,

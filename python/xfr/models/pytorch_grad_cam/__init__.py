@@ -1,3 +1,4 @@
+from xfr.models.pytorch_grad_cam.fd_cam import FDCAM
 from xfr.models.pytorch_grad_cam.grad_cam import GradCAM
 from xfr.models.pytorch_grad_cam.hirescam import HiResCAM
 from xfr.models.pytorch_grad_cam.grad_cam_elementwise import GradCAMElementWise
