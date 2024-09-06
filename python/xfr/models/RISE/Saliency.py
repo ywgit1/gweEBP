@@ -20,8 +20,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from utils import *
-
-from explanations import RISE, corrRISE,corrRISEBatch
+from explanations import RISE, corrRISE
 from PIL import Image
 
 cudnn.benchmark= True
@@ -37,8 +36,8 @@ args.workers = 8
 # # Sets the range of images to be explained for dataloader.
 # args.range = range(95, 105)
 # Size of imput images.
-# args.input_size = (224, 224)
-args.input_size = (256, 256)
+args.input_size = (224, 224)
+# args.input_size = (256, 256)
 # Size of batches for GPU. 
 # Use maximum number that the GPU allows.
 # args.gpu_batch = 250
@@ -74,11 +73,10 @@ model = nn.DataParallel(model)
 
 """ Create Explainer Instance """
 # explainer = RISE(model, args.input_size, args.gpu_batch)
-# explainer = corrRISE(model, args.input_size, args.gpu_batch)
-explainer = corrRISEBatch(model, args.input_size, args.gpu_batch)
+explainer = corrRISE(model, args.input_size, args.gpu_batch)
 # Generate masks for RISE or use the saved ones.
 maskspath = 'masks.npy'
-generate_new = False
+generate_new = True
 
 if generate_new or not os.path.isfile(maskspath):
     explainer.generate_masks(N=6000, s=8, p1=0.1, savepath=maskspath)
@@ -87,7 +85,6 @@ else:
     explainer.load_masks(maskspath)
     print('Masks are loaded.')
     
-
 """Explaining one instance """
 def example_RISE(img, top_k=3):
     saliency = explainer(img.cuda()).cpu().numpy() # Calculates saliency maps for all the 1000 classes
@@ -116,17 +113,13 @@ def example_corrRISE(img1, img2,top_k=1):
     saliency = explainer(img1.cuda(),img2.cuda())
     saliency1=saliency[0]
     saliency2=saliency[1]
-    # p1, c1 = torch.topk(model(img1.cuda()), k=top_k)  #torch.topk returns values and indices
-    # p1, c1 = p1[0], c1[0]
-    # p2, c2 = torch.topk(model(img2.cuda()), k=top_k)  #torch.topk returns values and indices
-    # p2, c2 = p2[0], c2[0]
+
     #Subplot 1
     plt.subplot(2, 2, 1)
     tensor_imshow(img1[0])
     #Subplot 2
     plt.subplot(2, 2, 2)
     tensor_imshow(img1[0])
-    # saliency1 = saliency1[c1[0]]
     plt.imshow(saliency1, cmap='jet', alpha=0.5)
     plt.colorbar(fraction=0.046, pad=0.04)
     #Subplot 3
@@ -135,7 +128,6 @@ def example_corrRISE(img1, img2,top_k=1):
     #Subplot 4
     plt.subplot(2, 2, 4)
     tensor_imshow(img2[0])
-    # saliency2 = saliency2[c2[0]]
     plt.imshow(saliency2, cmap='jet', alpha=0.5)
     plt.colorbar(fraction=0.046, pad=0.04)
     
