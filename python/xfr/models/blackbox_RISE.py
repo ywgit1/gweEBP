@@ -24,7 +24,7 @@ from xfr.utils import center_crop
 from xfr.models.resnet import convert_resnet101v4_image
 # from xfr.models.RISE.explanations import RISE 
 from tqdm import tqdm
-
+import cv2
 
 def print_flush(str, file=sys.stdout, flush=True):
     file.write(str + '\n')
@@ -244,6 +244,45 @@ class BlackBoxRISE:
         )
         self.apply_masks_using_image(blurred)
         
+    def generate_sparse_masks2(self, random_shift=True, order=1):
+        # Assume this divides evenly for now?
+        input_size = self.input_size
+        mask_size = tuple(np.ceil(np.divide(input_size, self.mask_scale)).astype(np.int))
+
+        # Rescale prior
+        prior_scaled = np.random.random(mask_size).astype(np.float32)
+        
+        # Set clipping threshold
+        pct = 50.0
+        threshold = np.percentile(prior_scaled, pct)
+        prior_scaled[prior_scaled<threshold] = 0.0
+
+        prior_scaled[prior_scaled>0] = 1.0
+
+        # Normalize sum to one
+        prior_scaled /= prior_scaled.sum()
+
+        # Generate binary masks with prior probability of selecting 1
+        grid = np.ones((self.num_masks, mask_size[0], mask_size[1]))
+        for idx in range(self.num_masks):
+            rand_idx = np.random.choice(np.arange(prior_scaled.size), 2, replace=False, p=prior_scaled.ravel())
+            grid[idx,...].ravel()[rand_idx] = 0.0
+
+        # Resize binary masks to input_size
+        # TODO: Parallelize
+        masks = np.empty((self.num_masks, input_size[0], input_size[1]))
+        if random_shift:
+            # Resize binary masks with random shifts
+            for i in range(self.num_masks):
+                x = np.random.randint(0, self.mask_scale)
+                y = np.random.randint(0, self.mask_scale)
+                masks[i,...] = resize(grid[i], (input_size[0]+self.mask_scale, input_size[1]+self.mask_scale), order=order, mode='reflect', anti_aliasing=False)[x:x + input_size[0], y:y + input_size[1]]
+                # cv2.imwrite("mask.png", (255*masks[i,...]).astype(np.uint8))
+        else:
+            masks = resize(grid, (self.num_masks, input_size[0], input_size[1]), order=order, mode='reflect', anti_aliasing=False)
+        
+        self.masks = masks
+            
     def generate_sparse_masks(self, random_shift=True, order=1):
         s = self.mask_scale
         N = self.num_masks
@@ -251,18 +290,19 @@ class BlackBoxRISE:
         cell_size = np.ceil(np.array(self.input_size) / s)
         up_size = (s + 1) * cell_size
 
-        grid = np.random.rand(N, s, s) > p1 # p1 is small, so only small patches are occluded
-        grid = grid.astype('float32')
-
         self.masks = np.empty((N, *self.input_size), dtype=np.float32)
 
         for i in tqdm(range(N), desc='Generating filters'):
+            grid = np.random.rand(N, s, s) > p1 # p1 is small, so only small patches are occluded
+            grid = grid.astype('float32')
             # Random shifts
             x = np.random.randint(0, cell_size[0])
             y = np.random.randint(0, cell_size[1])
             # Linear upsampling and cropping
             self.masks[i, :, :] = resize(grid[i], up_size, order=1, mode='reflect',
                                          anti_aliasing=False)[x:x + self.input_size[0], y:y + self.input_size[1]]
+            # cv2.imwrite('mask.png', (255 * self.masks[i, :, :]).astype(np.uint8))
+            
         # self.masks = self.masks.reshape(-1, *self.input_size)
 
     def contrastive_triplet_similarity(self):
@@ -303,6 +343,11 @@ class BlackBoxRISE:
         weighted_masks = filtered_weights[...,np.newaxis,np.newaxis] * filtered_masks
         combination = weighted_masks.mean(axis=0)
         
+        # scores = (filtered_weights - filtered_weights.mean()) / (1e-8 + filtered_weights.std())
+        # filtered_masks = filtered_masks.reshape((filtered_masks.shape[0], -1))
+        # filtered_masks = (filtered_masks - filtered_masks.mean(axis=0, keepdims=True)) / (1e-8 + filtered_masks.std(axis=0, keepdims=True))
+        # combination = np.matmul(scores, filtered_masks).reshape(*filtered_masks.shape[1:])
+        
         return combination
 
     def compute_saliency_map(self, positive_scores=True, percentile=0):
@@ -322,7 +367,11 @@ class BlackBoxRISE:
             selected_indices = -self.mask_scores >= threshold
             saliency_map = self.combine_masks(selected_indices)-1.0
         
-        # saliency_map = 1.0 - self.combine_masks()
+        # scores = (self.mask_scores - self.mask_scores.mean()) / self.mask_scores.std()
+        # self.masks = self.masks.reshape((self.masks.shape[0], -1))
+        # self.masks = (self.masks - self.masks.mean(axis=0, keepdims=True)) / (self.masks.std(axis=0, keepdims=True))
+        # saliency_map = np.matmul(scores, self.masks)
+        # saliency_map = 1.0 - saliency_map.reshape(*self.masks.shape[1:])
 
         saliency_map -= saliency_map.min()
         saliency_map /= saliency_map.max()
@@ -339,7 +388,7 @@ class BlackBoxRISE:
         #    curr_step += 1
         
         print_flush('\n{}/{} Generating masks...'.format(curr_step, num_steps), flush=True)
-        self.generate_sparse_masks()
+        self.generate_sparse_masks2()
         curr_step += 1
         
         print_flush('\n{}/{} Applying masks...'.format(curr_step, num_steps), flush=True)
