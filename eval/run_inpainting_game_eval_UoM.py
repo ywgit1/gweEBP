@@ -50,23 +50,23 @@ if __name__ == '__main__':
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             
-            'GradCAM',
-            'PairwiseSIM',
-            'EBP',
-            'cEBP',
-            'tcEBP',
-            'gweEBP',
-            
+            # 'GradCAM',
+            # 'PairwiseSIM',
             # 'EBP',
             # 'cEBP',
             # 'tcEBP',
-            # 'eEBP',
-            # 'ecEBP',
-            # 'etcEBP'
+            # 'gweEBP',
+            
+            'EBP',
+            'cEBP',
+            'tcEBP',
+            'eEBP',
+            'ecEBP',
+            'etcEBP'
             
             # 'GradCAM',
             # 'AblationCAM',
-            'LayerCAM',
+            # 'LayerCAM',
             # 'HiResCAM',
             # 'EigenCAM',
             #'AGF',
