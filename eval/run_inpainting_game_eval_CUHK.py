@@ -50,24 +50,25 @@ if __name__ == '__main__':
             # 'eEBP_mode=affineonly_v06_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
-            'GradCAM',
-            'PairwiseSIM',
-            'EBP',
-            'cEBP',
-            'tcEBP',
-            'gweEBP',
+            
+            # 'GradCAM',
+            # 'PairwiseSIM',
+            # 'EBP',
+            # 'cEBP',
+            # 'tcEBP',
+            # 'gweEBP',
             # 'gwecEBP',
-            'LayerCAM',
+            # 'LayerCAM',
             # 'HiResCAM',
             # 'AGF',
             # 'RSP',
             # 'AblationCAM'
-            # 'EBP',
-            # 'cEBP',
-            # 'tcEBP',
-            # 'eEBP',
-            # 'ecEBP',
-            # 'etcEBP'
+            'EBP',
+            'cEBP',
+            'tcEBP',
+            'eEBP',
+            'ecEBP',
+            'etcEBP'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '
@@ -129,7 +130,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-lcnn9',
+            'CUHK-vgg16',
         ],
         dest='NET',
         help='network to analyze',

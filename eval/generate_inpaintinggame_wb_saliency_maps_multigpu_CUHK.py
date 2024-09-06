@@ -306,7 +306,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['layercam'],
+        default=['ablationcam'],
         type=str,
         help='cEBP: contrastive EBP and truncated cEBP; '\
             'EBP: EBP; '\
@@ -316,7 +316,7 @@ if __name__ == '__main__':
             'clrp: contrastive layered relevance propagation; '\
             'agf: attribution guided factorization; '\
             'rsp: relative sectional propagation; '\
-            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam/fullgrad/hirescam/layercam: CAM related methods;'\
+            'gradcam/xgradcam/eigencam/gradcam++/scorecam/ablationcam/fullgrad/hirescam/layercam/fdcam: CAM related methods;'\
             'gradcam+sess/scorecam+sess/groupcam+sess: SESS enhanced CAM methods'
             
     )
@@ -346,7 +346,7 @@ if __name__ == '__main__':
         help='restrict processing to specific masks, zero padded',
     )
     parser.add_argument('--net', nargs='+',
-                        default=['CUHK-lcnn9'],
+                        default=['CUHK-vgg16'],
                         dest='WB_NET')
 
     parser.add_argument(
