@@ -26,7 +26,8 @@ from xfr.utils import create_net
 from xfr import utils
 from xfr import inpaintgame3_dir
 from xfr import inpaintgame_CUHK_saliencymaps_dir
-from xfr.models import blackbox_RISE as bb
+from xfr.models import blackbox_RISE as bb_RISE
+from xfr.models import blackbox_CorrRISE as bb_CorrRISE
 from xfr.show import create_save_smap
 import time
 import gc
@@ -39,11 +40,11 @@ mask_pattern = lambda dict_: \
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def create_bbox(blackbox_fn, probe_im, mates, nonmates, rise_scale,
+def create_bbox_RISE(blackbox_fn, probe_im, mates, nonmates, rise_scale,
                 device, input_size, perct
                ):
     def bbox():
-        rise = bb.BlackBoxRISE(
+        rise = bb_RISE.BlackBoxRISE(
             probe=probe_im,
             refs=mates,
             gallery=nonmates,
@@ -62,16 +63,44 @@ def create_bbox(blackbox_fn, probe_im, mates, nonmates, rise_scale,
         saliency_map = np.array(rise.saliency_map, copy=True)
         del rise
         gc.collect()
+        torch.cuda.empty_cache()
         return saliency_map
     return bbox
 
+def create_bbox_CorrRISE(blackbox_fn, probe_im, mates, nonmates, rise_scale,
+                device, input_size, perct
+               ):
+    def bbox():
+        rise = bb_CorrRISE.BlackBoxCorrRISE(
+            probe=probe_im,
+            refs=mates,
+            gallery=nonmates,
+            mask_scale=rise_scale,
+            black_box_fn=blackbox_fn,
+            device=device,
+            input_size=input_size,
+            perct=perct
+            )
+
+        # Evaluate black box
+        rise.evaluate()
+
+        # Save saliency map
+        # plotOverlay(strise.probe, strise.saliency_map, fs_filename)
+        saliency_map = np.array(rise.saliency_map, copy=True)
+        del rise
+        gc.collect()
+        torch.cuda.empty_cache()
+        return saliency_map
+    return bbox
 
 def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_id,
                       mask_id, ebp_ver, overwrite,
                       device,
                       rise_scale=12,
                       input_size=(224, 224),
-                      perct=10
+                      perct=10,
+                      method='RISE'
                      ):
 
     subject_id = subj_id
@@ -161,28 +190,52 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
         # for num_mask_elements in [1, 2, 4, 8, 16]:
         for pct in perct:
             t0 = time.time()
-            fn = 'bbox-rise_perct=%d_scale_%s' % (
-                pct,
-                rise_scale,
-            )
-            create_save_smap(
-                fn,
-                output_dir, overwrite,
-                smap_fn=create_bbox(
-                    blackbox_fn=bb_score_fn,
+            if method == 'RISE':
+                fn = 'bbox-rise_perct=%d_scale_%s' % (
+                    pct,
+                    rise_scale,
+                )
+                create_save_smap(
+                    fn,
+                    output_dir, overwrite,
+                    smap_fn=create_bbox_RISE(
+                        blackbox_fn=bb_score_fn,
+                        probe_im=probe_im,
+                        mates=mates,
+                        nonmates=nonmates,
+                        rise_scale=rise_scale,
+                        input_size=input_size,
+                        device=device,
+                        perct=pct
+                    ),
                     probe_im=probe_im,
-                    mates=mates,
-                    nonmates=nonmates,
-                    rise_scale=rise_scale,
-                    input_size=input_size,
-                    device=device,
-                    perct=pct
-                ),
-                probe_im=probe_im,
-                mask_im=mask_im,
-                mask_id=mask_id,
-                probe_info=probe_row
-            )
+                    mask_im=mask_im,
+                    mask_id=mask_id,
+                    probe_info=probe_row
+                )
+            elif method == 'CorrRISE':
+                fn = 'bbox-corrrise_perct=%d_scale_%s' % (
+                    pct,
+                    rise_scale,
+                )
+                create_save_smap(
+                    fn,
+                    output_dir, overwrite,
+                    smap_fn=create_bbox_CorrRISE(
+                        blackbox_fn=bb_score_fn,
+                        probe_im=probe_im,
+                        mates=mates,
+                        nonmates=nonmates,
+                        rise_scale=rise_scale,
+                        input_size=input_size,
+                        device=device,
+                        perct=pct
+                    ),
+                    probe_im=probe_im,
+                    mask_im=mask_im,
+                    mask_id=mask_id,
+                    probe_info=probe_row
+                )
             t1 = time.time()
             total_n = t1 - t0
             total_min = int(total_n // 60)

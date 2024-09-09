@@ -72,6 +72,8 @@ def run_experiment(params, params_export, gpu_queue):
 
         net_name = params['WB_NET'][0]
         input_size = (224, 224)
+        if 'lcnn' in net_name:
+            input_size = (128, 128)
         ebp_version = int(params['EBP_VER'][0])
         wb = create_wbnet(net_name, ebp_version=ebp_version, device=device)
 
@@ -111,19 +113,38 @@ def run_experiment(params, params_export, gpu_queue):
             scores = L2_similarity(probe_vecs, gallery_vecs)
             return scores
 
-        generate_bb_smaps(
-            bb_fn, wb.convert_from_numpy,
-            net_name,
-            img_base='img/%s' % params['IMG_NUM'][0],
-            subj_id=params['SUBJECT_ID'][0],
-            mask_id=params['MASK_ID'][0],
-            ebp_ver=ebp_version,
-            overwrite=params['overwrite'][0],
-            device=device,
-            rise_scale=params['RISE_SCALE'][0],
-            input_size=input_size,
-            perct=params['MASKING_PERCT']
-        )
+        if params['method'][0].lower() == 'rise':
+            generate_bb_smaps(
+                bb_fn, wb.convert_from_numpy,
+                net_name,
+                img_base='img/%s' % params['IMG_NUM'][0],
+                subj_id=params['SUBJECT_ID'][0],
+                mask_id=params['MASK_ID'][0],
+                ebp_ver=ebp_version,
+                overwrite=params['overwrite'][0],
+                device=device,
+                rise_scale=params['RISE_SCALE'][0],
+                input_size=input_size,
+                perct=params['MASKING_PERCT'],
+                method=params['method'][0]
+            )
+        elif params['method'][0].lower() == 'corrrise':
+            generate_bb_smaps(
+                wb, wb.convert_from_numpy,
+                net_name,
+                img_base='img/%s' % params['IMG_NUM'][0],
+                subj_id=params['SUBJECT_ID'][0],
+                mask_id=params['MASK_ID'][0],
+                ebp_ver=ebp_version,
+                overwrite=params['overwrite'][0],
+                device=device,
+                rise_scale=params['RISE_SCALE'][0],
+                input_size=input_size,
+                perct=params['MASKING_PERCT'],
+                method=params['method'][0]
+            )
+        else:
+            raise ValueError('Bad method {0}'.format(params['method'][0]))
         success = True
 
     except TypeError as e:
@@ -342,6 +363,13 @@ if __name__ == '__main__':
         help='network to use',
     )
 
+    parser.add_argument(
+        '--method', nargs='*',
+        default=['CorrRISE'],
+        type=str,
+        help='RISE or CorrRISE'
+    )
+    
     # parser.add_argument('--no-overwrite',
     #                     dest='overwrite',
     #                     action='store_false')
