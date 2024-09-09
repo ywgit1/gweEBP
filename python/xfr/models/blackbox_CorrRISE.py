@@ -389,10 +389,11 @@ class BlackBoxCorrRISE:
         
         print_flush('\n{}/{} Generating masks...'.format(curr_step, num_steps), flush=True)
         # self.generate_sparse_masks2()
-        if os.path.exists('masks.npy'):
-            self.corrRISE.load_masks('masks.npy')
+        mask_fn = 'masks_{}x{}.npy'.format(self.input_size[0], self.input_size[1])
+        if os.path.exists(mask_fn):
+            self.corrRISE.load_masks(mask_fn)
         else:
-            self.corrRISE.generate_masks(self.num_masks, self.mask_scale, self.perct * 0.01, 'masks.npy')
+            self.corrRISE.generate_masks(self.num_masks, self.mask_scale, self.perct * 0.01, mask_fn)
         curr_step += 1
         
         print_flush('\n{}/{} Computing saliency map for the positive pair...'.format(curr_step, num_steps), flush=True)

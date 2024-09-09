@@ -358,7 +358,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--net', nargs='+',
-        default=['lcnn9'], # 'vgg16' or 'lcnn9'
+        default=['vgg16'], # 'vgg16' or 'lcnn9'
         dest='WB_NET',
         help='network to use',
     )
