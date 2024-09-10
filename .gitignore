@@ -16,3 +16,5 @@ eval/cache/
 *.bmp
 *.npy
 paper/*.pdf
+python/xfr/models/XFace/__pycache__/
+python/xfr/models/XFace/vis_paper/__pychache__/

@@ -143,6 +143,18 @@ def run_experiment(params, params_export, gpu_queue):
                 perct=params['MASKING_PERCT'],
                 method=params['method'][0]
             )
+        elif params['method'][0].lower() == 'xface':
+            generate_bb_smaps(
+                wb, wb.convert_from_numpy,
+                net_name,
+                img_base='img/%s' % params['IMG_NUM'][0],
+                subj_id=params['SUBJECT_ID'][0],
+                mask_id=params['MASK_ID'][0],
+                ebp_ver=ebp_version,
+                overwrite=params['overwrite'][0],
+                device=device,
+                method=params['method'][0]
+            )
         else:
             raise ValueError('Bad method {0}'.format(params['method'][0]))
         success = True
@@ -365,9 +377,9 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--method', nargs='*',
-        default=['CorrRISE'],
+        default=['XFace'],
         type=str,
-        help='RISE or CorrRISE'
+        help='RISE or CorrRISE or XFace'
     )
     
     # parser.add_argument('--no-overwrite',

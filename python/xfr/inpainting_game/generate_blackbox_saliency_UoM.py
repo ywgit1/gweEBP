@@ -28,6 +28,7 @@ from xfr import inpaintgame2_dir
 from xfr import inpaintgame_saliencymaps_dir
 from xfr.models import blackbox_RISE as bb_RISE
 from xfr.models import blackbox_CorrRISE as bb_CorrRISE
+from xfr.models import blackbox_XFace as bb_XFace
 from xfr.show import create_save_smap
 import time
 import gc
@@ -94,13 +95,36 @@ def create_bbox_CorrRISE(blackbox_fn, probe_im, mates, nonmates, rise_scale,
         return saliency_map
     return bbox
 
+def create_bbox_XFace(blackbox_fn, probe_im, mates, nonmates,
+                device
+               ):
+    def bbox():
+        xface = bb_XFace.BlackBoxXFace(
+            probe=probe_im,
+            refs=mates,
+            gallery=nonmates,
+            black_box_fn=blackbox_fn,
+            device=device
+            )
+
+        # Evaluate black box
+        xface.evaluate()
+
+        # Save saliency map
+        # plotOverlay(strise.probe, strise.saliency_map, fs_filename)
+        saliency_map = np.array(xface.saliency_map, copy=True)
+        del xface
+        gc.collect()
+        torch.cuda.empty_cache()
+        return saliency_map
+    return bbox
 
 def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_id,
                       mask_id, ebp_ver, overwrite,
                       device,
                       rise_scale=12,
                       input_size=(224, 224),
-                      perct=10,
+                      perct=[10],
                       method='RISE'
                      ):
 
@@ -191,7 +215,7 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
         # for num_mask_elements in [1, 2, 4, 8, 16]:
         for pct in perct:
             t0 = time.time()
-            if method == 'RISE':
+            if method.lower() == 'rise':
                 fn = 'bbox-rise_perct=%d_scale_%s' % (
                     pct,
                     rise_scale,
@@ -214,7 +238,7 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
                     mask_id=mask_id,
                     probe_info=probe_row
                 )
-            elif method == 'CorrRISE':
+            elif method.lower() == 'corrrise':
                 fn = 'bbox-corrrise_perct=%d_scale_%s' % (
                     pct,
                     rise_scale,
@@ -231,6 +255,23 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
                         input_size=input_size,
                         device=device,
                         perct=pct
+                    ),
+                    probe_im=probe_im,
+                    mask_im=mask_im,
+                    mask_id=mask_id,
+                    probe_info=probe_row
+                )
+            elif method.lower() == 'xface':
+                fn = 'bbox-xface'
+                create_save_smap(
+                    fn,
+                    output_dir, overwrite,
+                    smap_fn=create_bbox_XFace(
+                        blackbox_fn=bb_score_fn,
+                        probe_im=probe_im,
+                        mates=mates,
+                        nonmates=nonmates,
+                        device=device
                     ),
                     probe_im=probe_im,
                     mask_im=mask_im,

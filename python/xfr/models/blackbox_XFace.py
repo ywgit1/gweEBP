@@ -22,9 +22,11 @@ import torch
 from xfr.utils import create_net
 from xfr.utils import center_crop
 from xfr.models.resnet import convert_resnet101v4_image
-from xfr.models.RISE.explanations import corrRISE 
+from xfr.models.XFace.xface import XFace, normalize
 from tqdm import tqdm
 import cv2
+from xfr import utils
+import torch
 
 def print_flush(str, file=sys.stdout, flush=True):
     file.write(str + '\n')
@@ -109,7 +111,7 @@ def custom_black_box_fn(probes, gallery):
     pass
 
 
-class BlackBoxCorrRISE:
+class BlackBoxXFace:
     def __init__(self,
             probe=None,
             refs=None,
@@ -118,16 +120,9 @@ class BlackBoxCorrRISE:
             gallery=None, 
             gallery_size=50,
             black_box_fn=None, # pass the model instead of function
-            num_masks=5000,
-            input_size=224,
-            mask_scale=12,
-            perct = 10,
-            triplet_score_type='cts',
             use_gpu=True,
             device=None,
         ):
-        
-        self.triplet_scoring_fns = {'cts': self.contrastive_triplet_similarity}
 
         # Validate inputs
         self.use_gpu = check_gpu(use_gpu=use_gpu)
@@ -193,94 +188,45 @@ class BlackBoxCorrRISE:
             self.gallery_size = gallery_size
 
         # Setup black box
-        self.corrRISE = corrRISE(black_box_fn, input_size)
-
-        self.num_masks = num_masks
-        self.mask_scale = mask_scale
-
-        # Setup triplet scoring function
-        if (triplet_score_type is not None):
-            if (triplet_score_type not in self.triplet_scoring_fns):
-                raise ValueError('Specified triplet score type "{}" is not supported.'.format(triplet_score_type))
+        def inference_func(img, model):
+            if isinstance(img, np.ndarray):
+                if len(img.shape) == 3:
+                    img = model.convert_from_numpy(img) # ndarray->torch.tensor
+                    emd = model.embeddings(img)
+                    return emd.reshape(-1)
+                elif len(img.shape) == 4:
+                    imgs = []
+                    for im in tqdm(img):
+                        im = model.convert_from_numpy(im)
+                        imgs.append(im)
+                    imgTensor = torch.cat(imgs, dim=0)
+                    emd_list = []
+                    for i in tqdm(range(0, imgTensor.shape[0], 64)):
+                        batch = imgTensor[i:min(i + 64, imgTensor.shape[0])]
+                        emd_list.append(model.embeddings(batch))
+                    emd = np.concatenate(emd_list, axis=0)
+                    return emd
+            elif isinstance(img, str):
+                img = [im for im in utils.image_loader([img])][0]
+                img = model.convert_from_numpy(img)
+                emd = model.embeddings(img)
+                return emd
             else:
-                self.triplet_score_type = triplet_score_type
-                self.triplet_scoring_fn = self.triplet_scoring_fns[triplet_score_type]
-        else:
-            raise ValueError('Triplet score type must be specified')
+                raise TypeError('Bad image type {}'.format(type(img)))
             
-        self.perct = perct
-        self.input_size = input_size
-        self.apply_masks = self.mask_fill_gray
-    
-    def set_probe(self, probe):
-        if isinstance(probe, str) or isinstance(probe, np.ndarray):
-            self.probe = center_crop(probe, convert_uint8=False)
-        else:
-            raise ValueError('Probe must be a filepath to an image or a NumPy array')
-
-        # Reset probe gallery scores if necessary
-        if (hasattr(self, 'original_probe_gallery_scores')):
-            self.original_probe_gallery_scores = None 
-        
-
-    def compute_saliency_map(self, positive_scores=True, percentile=0):
-        # Sort mask scores
-        sorted_idx = self.mask_scores.argsort()[::-1]
-        pos_sorted_idx = sorted_idx[self.mask_scores[sorted_idx] > 0]
-        neg_sorted_idx = sorted_idx[self.mask_scores[sorted_idx] < 0][::-1]
-
-        # try: - most of the time it indicates wrong pair of images used
-        # Select indices based on percentile
-        if (positive_scores):
-            threshold = np.percentile(self.mask_scores[pos_sorted_idx], percentile)
-            selected_indices = self.mask_scores >= threshold
-            saliency_map = 1.0-self.combine_masks(selected_indices)
-        else:
-            threshold = np.percentile(-self.mask_scores[neg_sorted_idx], percentile)
-            selected_indices = -self.mask_scores >= threshold
-            saliency_map = self.combine_masks(selected_indices)-1.0
-        
-        # scores = (self.mask_scores - self.mask_scores.mean()) / self.mask_scores.std()
-        # self.masks = self.masks.reshape((self.masks.shape[0], -1))
-        # self.masks = (self.masks - self.masks.mean(axis=0, keepdims=True)) / (self.masks.std(axis=0, keepdims=True))
-        # saliency_map = np.matmul(scores, self.masks)
-        # saliency_map = 1.0 - saliency_map.reshape(*self.masks.shape[1:])
-
-        saliency_map -= saliency_map.min()
-        saliency_map /= saliency_map.max()
-        self.saliency_map = saliency_map
+        self.xFace = XFace(black_box_fn, inference_func)
 
     def evaluate(self):
-        curr_step = 1
-        num_steps = 3
-
-        #if (self.gallery is None):
-        #    num_steps += 1
-        #    print_flush('{}/{} Building gallery...'.format(curr_step, num_steps), flush=True)
-        #    self.build_gallery()
-        #    curr_step += 1
-        
-        print_flush('\n{}/{} Generating masks...'.format(curr_step, num_steps), flush=True)
-        # self.generate_sparse_masks2()
-        mask_fn = 'masks_{}x{}.npy'.format(self.input_size[0], self.input_size[1])
-        if os.path.exists(mask_fn):
-            self.corrRISE.load_masks(mask_fn)
-        else:
-            self.corrRISE.generate_masks(self.num_masks, self.mask_scale, self.perct * 0.01, mask_fn)
-        curr_step += 1
-        
-        print_flush('\n{}/{} Computing saliency map for the positive pair...'.format(curr_step, num_steps), flush=True)
-        sal_pp, _ = self.corrRISE(self.probe, self.refs[0])
-        curr_step += 1
-        
-        print_flush('\n{}/{} Computing saliency map for the negative pair...'.format(curr_step, num_steps), flush=True)
-        sal_np, _ = self.corrRISE(self.probe, self.gallery[0])
-        
+        ref = self.refs[0]
+        if isinstance(ref, str):
+            ref = [im for im in utils.image_loader([ref])][0]
+        sal_pp = self.xFace(self.probe, ref)
+        gallery = self.gallery[0]
+        if isinstance(gallery, str):
+            gallery = [im for im in utils.image_loader([gallery])][0]
+        sal_np = self.xFace(self.probe, gallery)
         saliency_map = sal_pp - sal_np
-        saliency_map -= saliency_map.min()
-        saliency_map /= saliency_map.max()
-        self.saliency_map = saliency_map
-        
+        self.saliency_map = normalize(saliency_map)
         print_flush('\nFinished!')
 
     def plot_gallery(self):

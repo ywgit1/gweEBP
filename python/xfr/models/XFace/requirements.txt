@@ -1,0 +1,8 @@
+# tensorflow-gpu==2.8.0 is removed from pypi, use tensorflow==2.8.0 instead
+tensorflow-gpu==2.8.0
+opencv-python-headless
+numpy
+scikit-learn
+scipy
+matplotlib
+tqdm
