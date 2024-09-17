@@ -50,28 +50,29 @@ if __name__ == '__main__':
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             # 'ecEBP_mode=affineonly_v06_cpu',
             
-            # 'GradCAM',
-            # 'PairwiseSIM',
-            # 'EBP',
-            # 'cEBP',
-            # 'tcEBP',
-            # 'gweEBP',
-            
             'EBP',
             'cEBP',
             'tcEBP',
-            'eEBP',
-            'ecEBP',
-            'etcEBP'
+            'gweEBP',
             
-            # 'GradCAM',
+            # 'EBP',
+            # 'cEBP',
+            # 'tcEBP',
+            # 'eEBP',
+            # 'ecEBP',
+            # 'etcEBP'
+            
+            'GradCAM',
             # 'AblationCAM',
             # 'LayerCAM',
             # 'HiResCAM',
             # 'EigenCAM',
             #'AGF',
             # 'RSP',
-            # 'cEBP'
+            'bbox-xface',
+            'bbox-corrrise_perct=10_scale_12',
+            # 'bbox-pairsim',
+            'PairwiseSIM'
             
         ],
         dest='METHOD',
@@ -134,7 +135,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'vgg16',
+            'lcnn9',
         ],
         dest='NET',
         help='network to analyze',
@@ -142,8 +143,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cache-dir',
         dest='cache_dir',
-        # default='/cache',
-        required=True,
+        default='cache',
+        # required=True,
         help='directory for caching results',
     )
     parser.add_argument(

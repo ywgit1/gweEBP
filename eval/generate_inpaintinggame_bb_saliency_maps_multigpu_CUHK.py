@@ -25,6 +25,7 @@ from xfr import xfr_root
 # from xfr import inpaintgame_CUHK_saliencymaps_dir
 
 from create_wbnet import create_wbnet
+from create_wbnet_PairSIM import create_wbnet as create_wbnet_pairsim
 from xfr.utils import iterate_param_sets
 from xfr.utils import prune_unneeded_exports
 from xfr.utils import normalize_gpus
@@ -75,7 +76,10 @@ def run_experiment(params, params_export, gpu_queue):
         if 'lcnn' in net_name:
             input_size = (128, 128)
         ebp_version = int(params['EBP_VER'][0])
-        wb = create_wbnet(net_name, ebp_version=ebp_version, device=device)
+        if params['method'][0].lower() == 'pairsim':
+            wb = create_wbnet_pairsim(net_name, device=device)
+        else:
+            wb = create_wbnet(net_name, ebp_version=ebp_version, device=device)
 
         def bb_fn(probes, gallery):
             """ For each probe, calculate the scores for matching to gallery.
@@ -143,7 +147,7 @@ def run_experiment(params, params_export, gpu_queue):
                 perct=params['MASKING_PERCT'],
                 method=params['method'][0]
             )
-        elif params['method'][0].lower() == 'xface':
+        elif params['method'][0].lower() == 'xface' or params['method'][0].lower() == 'pairsim':
             generate_bb_smaps(
                 wb, wb.convert_from_numpy,
                 net_name,
@@ -313,7 +317,7 @@ if __name__ == '__main__':
         '--gpu',
         '--gpus',
         dest='gpus',
-        default=None,
+        default=[0],
         nargs='+',
         type=int,
         help='space separated list of GPU ids to use.'
@@ -370,16 +374,16 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--net', nargs='+',
-        default=['CUHK-lcnn9'], # 'CUHK-vgg16' or 'CUHK-lcnn9'
+        default=['CUHK-vgg16'], # 'CUHK-vgg16' or 'CUHK-lcnn9'
         dest='WB_NET',
         help='network to use',
     )
 
     parser.add_argument(
         '--method', nargs='*',
-        default=['XFace'],
+        default=['PairSIM'],
         type=str,
-        help='RISE or CorrRISE or XFace'
+        help='RISE or CorrRISE or XFace or PairSIM'
     )
     
     # parser.add_argument('--no-overwrite',

@@ -51,24 +51,29 @@ if __name__ == '__main__':
             # 'ecEBP_mode=affineonly_v06_cpu',
             # 'etcEBP_mode=affineonly_v06_pct20_cpu',
             
-            # 'GradCAM',
-            # 'PairwiseSIM',
-            # 'EBP',
-            # 'cEBP',
-            # 'tcEBP',
-            # 'gweEBP',
+            'EBP',
+            'cEBP',
+            'tcEBP',
+            'gweEBP',
+            
             # 'gwecEBP',
             # 'LayerCAM',
             # 'HiResCAM',
             # 'AGF',
             # 'RSP',
-            # 'AblationCAM'
-            'EBP',
-            'cEBP',
-            'tcEBP',
-            'eEBP',
-            'ecEBP',
-            'etcEBP'
+            # 'AblationCAM',
+            'GradCAM',
+            'bbox-xface',
+            'bbox-corrrise_perct=10_scale_12',
+            # 'bbox-pairsim'
+            'PairwiseSIM'
+            
+            # 'EBP',
+            # 'cEBP',
+            # 'tcEBP',
+            # 'eEBP',
+            # 'ecEBP',
+            # 'etcEBP'
         ],
         dest='METHOD',
         help='saliency methods to compare, based on the slug used in saliency '
@@ -130,7 +135,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'CUHK-vgg16',
+            'CUHK-lcnn9',
         ],
         dest='NET',
         help='network to analyze',
@@ -138,8 +143,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cache-dir',
         dest='cache_dir',
-        # default='/cache',
-        required=True,
+        default='/cache',
+        # required=True,
         help='directory for caching results',
     )
     parser.add_argument(
@@ -147,7 +152,7 @@ if __name__ == '__main__':
         dest='smap_root',
         default=inpaintgame_CUHK_saliencymaps_dir,
         help='root directory of saliency maps to get results')
-
+    
     args = parser.parse_args()
     params = vars(args)
     params['balance_masks'] = False
@@ -161,7 +166,7 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
         print("Running on CPU")
-    
+   
     for net_name in params['NET']:
         net_dict[net_name] = create_wbnet(net_name, device=device)
 

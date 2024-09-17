@@ -75,6 +75,67 @@ regions_human_labels = {
     4: 'Mouth',
     5: 'FaceSkin'
 }
+human_labels_all = [
+    ('diffOrigInpaint', 'Groundtruth'),
+    ('inpaintingMask', 'Groundtruth - Inpainting Mask'),
+    ('diffOrigInpaintEBP', 'Groundtruth via EBP'),
+    ('diffOrigInpaintCEBP_median', 'cEBP Groundtruth (median)'),
+    ('diffOrigInpaintCEBP_negW', 'cEBP Groundtruth (negW)'),
+    ('meanEBP', 'Mean EBP'),
+    ('tlEBP', 'Whitebox Triplet EBP'),
+    ('tscEBP', 'Whitebox Triplet Similarity Contribution EBP'),
+    ('ctscEBP', 'Whitebox Contrastive Triplet Similarity Contribution EBP'),
+    ('ctscEBPv3', 'Whitebox Contrastive Triplet Similarity Contribution EBP v3'),
+    ('ctscEBPv4',
+     'Whitebox Triplet Contribution CEBP v4',
+     'Whitebox Triplet Contribution CEBP',
+    ),
+    ('tsv2EBP', 'Whitebox Triplet Similarity (V2) EBP'),
+    ('tsignEBP', 'Whitebox Triplet Sign EBP'),
+    ('tsignCEBP', 'Whitebox Triplet Sign Contrastive EBP'),
+    ('tsimCEBPv3',
+     'Whitebox Triplet Contrastive EBP v3',
+     'Whitebox Triplet CEBP',
+    ),
+    ('tsimPEBPv3',
+     'Whitebox Triplet EBP v3',
+     'Whitebox Triplet EBP',
+    ),
+    ('tsimCEBPv3unionSubtract',
+     'Whitebox Triplet Contrastive EBP (v3 union-sub)',
+    ),
+    ('tsimCEBPv3cross',
+     'Whitebox Triplet CEBP (v3 cross)',
+     'Whitebox Triplet CEBP (cross)',
+    ),
+    ('tsimCEBPv3.1', 'Whitebox Triplet Similarity Contrastive EBP (v3.1)'),
+    ('tlEBPreluLayer', 'Whitebox Triplet EBP (from ReLU)'),
+    ('tlEBPnegReflect', 'Whitebox Triplet EBP (neg reflect)'),
+    ('tlEBPposReflect', 'Whitebox Triplet EBP (pos reflect)'),
+    ('final', 'Blackbox Contrastive Triplet Similarity (2 elem)'),
+    ('bbox-rise', 'DISE'),
+    ('wb-rise', 'Whitebox PartialConv RISE'),
+    # ('pytorch-bb-rise', 'Blackbox RISE (PyTorch Implementation)'),
+    ('pytorch-bb-bmay2rise', 'Blackbox Contrastive Triplet'),
+    ('bb-bmay2rise', 'Blackbox RISE'),
+    ('meanEBP_VGG', 'VGG Mean EBP'),
+    ('meanEBP_ResNet', 'ResNet Mean EBP (Caffe)'),
+    ('weighted_subtree_triplet_ebp', 'Subtree EBP'),
+    ('EBP', 'EBP'),
+    ('cEBP', 'cEBP'),
+    ('tcEBP', 'tcEBP'),
+    ('contrastive_sf_triplet_ebp', 'cEBP with SF'),
+    ('eEBP', 'eEBP'),
+    ('ecEBP', 'ecEBP'),
+    ('etcEBP', 'etcEBP'),
+    ('bbox-xface', 'XFace'),
+    ('bbox-corrrise_perct=10', 'CorrRISE'),
+    ('bbox-corrrise_perct=10_scale_12', 'CorrRISE'),
+    ('bbox-pairsim', 'PairSIM'),
+    ('PairwiseSIM', 'PairwiseSIM'),
+    ('gweEBP', 'gweEBP'),
+    ('GradCAM', 'GradCAM')
+]
 
 def overlap_mask(smap, img, gt_mask, pred_mask):
     rgb = img / max(0.0001, img.max()) * 0.4
@@ -200,7 +261,7 @@ def make_inpaintinggame_plots(net_dict, params, human_net_labels):
     )
     smap_pattern = os.path.join(
         smap_root,
-        '{NET}/{SUBJECT_ID}/{ORIG_MASK_ID}-{METHOD}-saliency.npz'
+        '{METHOD_LABEL}-{NET}/{SUBJECT_ID}/{ORIG_MASK_ID}-{METHOD}-saliency.npz'
     )
 
     orig_pattern = os.path.join(
@@ -209,7 +270,14 @@ def make_inpaintinggame_plots(net_dict, params, human_net_labels):
     mask_pattern = os.path.join(
         '{INPAINT_BASENAME}_mask.png'
     ) # TODO: These patterns need to be modified for UoM dataset
-
+    human_labels = [(tup[0], tup[1], tup[1] if len(tup)==2 else tup[2])
+                    for tup in human_labels_all
+                ]
+    human_labels_simplified = [
+        (key, slabel) for key, _, slabel in human_labels
+    ]
+    human_labels_lookup = OrderedDict(human_labels_simplified)
+    
     for keys, grp in nonmate_classification.groupby(['NET', 'MASK_ID', 'METHOD']):
         for row_num, (idx, row) in enumerate(grp.iterrows()):
             if row['CLS_AS_TWIN'][-1] != 1:
@@ -227,7 +295,8 @@ def make_inpaintinggame_plots(net_dict, params, human_net_labels):
                                         row['FALSE_POS'])[stable_correct]
             num_thresh_pixels_first = (row['TRUE_POS'] +
                                        row['FALSE_POS'])[first_correct]
-
+            row['METHOD_LABEL'] = human_labels_lookup[row['METHOD']]
+            row['NET'] = row['NET'].split('-')[-1]
             smap = np.load(smap_pattern.format(**row), allow_pickle=True)['saliency_map']
             img = imageio.imread(orig_pattern.format(**row))
             img = utils.center_crop(img, convert_uint8=False)
@@ -339,59 +408,7 @@ def skip_combination(net, method, suffix_aggr):
         return True
     return False
 
-human_labels_all = [
-    ('diffOrigInpaint', 'Groundtruth'),
-    ('inpaintingMask', 'Groundtruth - Inpainting Mask'),
-    ('diffOrigInpaintEBP', 'Groundtruth via EBP'),
-    ('diffOrigInpaintCEBP_median', 'cEBP Groundtruth (median)'),
-    ('diffOrigInpaintCEBP_negW', 'cEBP Groundtruth (negW)'),
-    ('meanEBP', 'Mean EBP'),
-    ('tlEBP', 'Whitebox Triplet EBP'),
-    ('tscEBP', 'Whitebox Triplet Similarity Contribution EBP'),
-    ('ctscEBP', 'Whitebox Contrastive Triplet Similarity Contribution EBP'),
-    ('ctscEBPv3', 'Whitebox Contrastive Triplet Similarity Contribution EBP v3'),
-    ('ctscEBPv4',
-     'Whitebox Triplet Contribution CEBP v4',
-     'Whitebox Triplet Contribution CEBP',
-    ),
-    ('tsv2EBP', 'Whitebox Triplet Similarity (V2) EBP'),
-    ('tsignEBP', 'Whitebox Triplet Sign EBP'),
-    ('tsignCEBP', 'Whitebox Triplet Sign Contrastive EBP'),
-    ('tsimCEBPv3',
-     'Whitebox Triplet Contrastive EBP v3',
-     'Whitebox Triplet CEBP',
-    ),
-    ('tsimPEBPv3',
-     'Whitebox Triplet EBP v3',
-     'Whitebox Triplet EBP',
-    ),
-    ('tsimCEBPv3unionSubtract',
-     'Whitebox Triplet Contrastive EBP (v3 union-sub)',
-    ),
-    ('tsimCEBPv3cross',
-     'Whitebox Triplet CEBP (v3 cross)',
-     'Whitebox Triplet CEBP (cross)',
-    ),
-    ('tsimCEBPv3.1', 'Whitebox Triplet Similarity Contrastive EBP (v3.1)'),
-    ('tlEBPreluLayer', 'Whitebox Triplet EBP (from ReLU)'),
-    ('tlEBPnegReflect', 'Whitebox Triplet EBP (neg reflect)'),
-    ('tlEBPposReflect', 'Whitebox Triplet EBP (pos reflect)'),
-    ('final', 'Blackbox Contrastive Triplet Similarity (2 elem)'),
-    ('bbox-rise', 'DISE'),
-    ('wb-rise', 'Whitebox PartialConv RISE'),
-    # ('pytorch-bb-rise', 'Blackbox RISE (PyTorch Implementation)'),
-    ('pytorch-bb-bmay2rise', 'Blackbox Contrastive Triplet'),
-    ('bb-bmay2rise', 'Blackbox RISE'),
-    ('meanEBP_VGG', 'VGG Mean EBP'),
-    ('meanEBP_ResNet', 'ResNet Mean EBP (Caffe)'),
-    ('weighted_subtree_triplet_ebp', 'Subtree EBP'),
-    ('cEBP', 'cEBP'),
-    ('tcEBP', 'tcEBP'),
-    ('contrastive_sf_triplet_ebp', 'cEBP with SF'),
-    ('eEBP', 'eEBP'),
-    ('ecEBP', 'ecEBP'),
-    ('etcEBP', 'etcEBP'),
-]
+
 def get_base_methods(methods):
     base_methods = [meth.split('_scale_')[0] for meth in methods]
     base_methods = [meth.split('_trunc')[0] for meth in base_methods]
@@ -584,7 +601,7 @@ def plot_cls_vs_fpr(ax, grp, hnet, label,
             ylabel='Classified as Inpainted Non-mate',
         )
     ax.set(
-        # xscale='symlog',
+        xscale='symlog',
         xlabel='False Alarm Rate',
         xlim=(0,100),
     )
@@ -811,7 +828,7 @@ def run_inpaintinggame_analysis(hgame_thresholds, hgame_percentile, params,
     smap_pattern = os.path.join(
         smap_root,
         # '{NET}/subject_ID_{SUBJECT_ID}/{ORIGINAL_BASENAME}/inpainted/{MASK_ID}-{METHOD}-saliency.npz'
-        '{NET}/{SUBJECT_ID}/{MASK_ID}-{METHOD}-saliency.npz'
+        '{METHOD_LABEL}-{NET}/{SUBJECT_ID}/{MASK_ID}-{METHOD}-saliency.npz'
     )
 
     orig_pattern = os.path.join(
@@ -891,6 +908,15 @@ def run_inpaintinggame_analysis(hgame_thresholds, hgame_percentile, params,
 
     snet = None
     classified_as_nonmate = []  # using operational threshold
+    
+    human_labels = [(tup[0], tup[1], tup[1] if len(tup)==2 else tup[2])
+                    for tup in human_labels_all
+                ]
+    human_labels_simplified = [
+        (key, slabel) for key, _, slabel in human_labels
+    ]
+    human_labels_lookup = OrderedDict(human_labels_simplified)
+    
     for net_name in params['NET']:
         base_net = get_base_net(net_name)
         print(f"NET={base_net}\n")
@@ -988,7 +1014,8 @@ def run_inpaintinggame_analysis(hgame_thresholds, hgame_percentile, params,
                         #     d['NET'] = base_net
                         # else:
                         #     d['NET'] = net
-
+                        d['METHOD_LABEL'] = human_labels_lookup[d['METHOD']]
+                        d['NET'] = d['NET'].split('-')[-1]
                         smap_filename = smap_pattern.format(**d)
                         try:
                             if method.split('+')[0] == 'inpaintingMask':
@@ -1078,7 +1105,8 @@ def run_inpaintinggame_analysis(hgame_thresholds, hgame_percentile, params,
                         elif method == 'meanEBP_ResNet':
                             d['NET'] = 'resnet+compat-scale1'
                             d['METHOD'] = method.split('_')[0]
-
+                        d['METHOD_LABEL'] = human_labels_lookup[d['METHOD']]
+                        d['NET'] = d['NET'].split('-')[-1]
                         mask_filename = mask_pattern.format(**d)
                         inpainted_region = imageio.imread(mask_filename)
                         try:

@@ -22,9 +22,11 @@ import torch
 from xfr.utils import create_net
 from xfr.utils import center_crop
 from xfr.models.resnet import convert_resnet101v4_image
-from xfr.models.RISE.explanations import corrRISE 
 from tqdm import tqdm
 import cv2
+from xfr import utils
+import torch
+from numpy import matlib as mb
 
 def print_flush(str, file=sys.stdout, flush=True):
     file.write(str + '\n')
@@ -108,8 +110,71 @@ def custom_black_box_fn(probes, gallery):
     """
     pass
 
-
-class BlackBoxCorrRISE:
+def get_deep_features(img, model):
+    if isinstance(img, np.ndarray):
+        if len(img.shape) == 3:
+            img = model.convert_from_numpy(img) # ndarray->torch.tensor
+            feat = model.embeddings(img)
+            return feat
+        elif len(img.shape) == 4:
+            imgs = []
+            for im in tqdm(img):
+                im = model.convert_from_numpy(im)
+                imgs.append(im)
+            imgTensor = torch.cat(imgs, dim=0)
+            feat_list = []
+            for i in tqdm(range(0, imgTensor.shape[0], 64)):
+                batch = imgTensor[i:min(i + 64, imgTensor.shape[0])]
+                feat_list.append(model.embeddings(batch))
+            feat = np.concatenate(feat_list, axis=0)
+            return feat
+    elif isinstance(img, str):
+        img = [im for im in utils.image_loader([img])][0]
+        img = model.convert_from_numpy(img)
+        feat = model.embeddings(img)
+        return feat
+    else:
+        raise TypeError('Bad image type {}'.format(type(img)))
+            
+def compute_spatial_similarity(conv1, conv2):
+    """
+    Takes in the last convolutional layer from two images, computes the pooled output
+    feature, and then generates the spatial similarity map for both images.
+    conv1 [H*W, Channel], conv2 [H*W, Channel]
+    
+    Paper:
+        Stylianou, Abby, Richard Souvenir, and Robert Pless.
+        "Visualizing deep similarity networks."
+        2019 IEEE Winter Conference on Applications of Computer Vision (WACV). IEEE, 2019.
+        
+    """    
+    conv1 = np.transpose(conv1, [0,2,3,1]) # Permute the dimensions of an array # (1, 7, 7, 512)
+    conv2 = np.transpose(conv2,[0,2,3,1])
+    
+    conv1 = conv1.reshape(-1,conv1.shape[-1])     # e1.shape (49,512)
+    conv2 = conv2.reshape(-1,conv2.shape[-1])
+                    
+    pool1 = np.mean(conv1,axis=0) # axis=0 represents rows (Channel, )
+    pool2 = np.mean(conv2,axis=0) # (Channel, )
+    
+    out_sz = (int(np.sqrt(conv1.shape[0])),int(np.sqrt(conv1.shape[0])))  # (H, H)
+    # Equ 3 in paper
+    
+    conv1_normed = conv1 / np.linalg.norm(pool1) / conv1.shape[0]  # (H^2, C) Normalize - np.linalg.norm -> Frobenius norm 
+    conv2_normed = conv2 / np.linalg.norm(pool2) / conv2.shape[0]  # (H^2, C)
+    
+    im_similarity = np.zeros((conv1_normed.shape[0],conv1_normed.shape[0]))  # (H^2, H^2)
+    
+    for zz in range(conv1_normed.shape[0]):   # loop for each pixel
+        repPx = mb.repmat(conv1_normed[zz,:],conv1_normed.shape[0],1)
+        im_similarity[zz,:] = np.multiply(repPx,conv2_normed).sum(axis=1)
+        
+    similarity1 = np.reshape(np.sum(im_similarity,axis=1),out_sz)
+    similarity2 = np.reshape(np.sum(im_similarity,axis=0),out_sz)
+    
+    return similarity1, similarity2
+    
+class BlackBoxPairSIM:
     def __init__(self,
             probe=None,
             refs=None,
@@ -118,15 +183,9 @@ class BlackBoxCorrRISE:
             gallery=None, 
             gallery_size=50,
             black_box_fn=None, # pass the model instead of function
-            num_masks=5000,
-            input_size=224,
-            mask_scale=12,
-            perct = 10,
             use_gpu=True,
             device=None,
         ):
-        
-        # self.triplet_scoring_fns = {'cts': self.contrastive_triplet_similarity}
 
         # Validate inputs
         self.use_gpu = check_gpu(use_gpu=use_gpu)
@@ -190,59 +249,25 @@ class BlackBoxCorrRISE:
         else:
             self.gallery = gallery
             self.gallery_size = gallery_size
-
-        # Setup black box
-        self.corrRISE = corrRISE(black_box_fn, input_size)
-
-        self.num_masks = num_masks
-        self.mask_scale = mask_scale
-            
-        self.perct = perct
-        self.input_size = input_size
-
-    
-    def set_probe(self, probe):
-        if isinstance(probe, str) or isinstance(probe, np.ndarray):
-            self.probe = center_crop(probe, convert_uint8=False)
-        else:
-            raise ValueError('Probe must be a filepath to an image or a NumPy array')
-
-        # Reset probe gallery scores if necessary
-        if (hasattr(self, 'original_probe_gallery_scores')):
-            self.original_probe_gallery_scores = None 
-            
+        
+        self.model = black_box_fn
 
     def evaluate(self):
-        curr_step = 1
-        num_steps = 3
-
-        #if (self.gallery is None):
-        #    num_steps += 1
-        #    print_flush('{}/{} Building gallery...'.format(curr_step, num_steps), flush=True)
-        #    self.build_gallery()
-        #    curr_step += 1
-        
-        print_flush('\n{}/{} Generating masks...'.format(curr_step, num_steps), flush=True)
-        # self.generate_sparse_masks2()
-        mask_fn = 'masks_{}x{}.npy'.format(self.input_size[0], self.input_size[1])
-        if os.path.exists(mask_fn):
-            self.corrRISE.load_masks(mask_fn)
-        else:
-            self.corrRISE.generate_masks(self.num_masks, self.mask_scale, self.perct * 0.01, mask_fn)
-        curr_step += 1
-        
-        print_flush('\n{}/{} Computing saliency map for the positive pair...'.format(curr_step, num_steps), flush=True)
-        sal_pp, _ = self.corrRISE(self.probe, self.refs[0])
-        curr_step += 1
-        
-        print_flush('\n{}/{} Computing saliency map for the negative pair...'.format(curr_step, num_steps), flush=True)
-        sal_np, _ = self.corrRISE(self.probe, self.gallery[0])
-        
+        ref = self.refs[0]
+        if isinstance(ref, str):
+            ref = [im for im in utils.image_loader([ref])][0]
+        probe_feat = get_deep_features(self.probe, self.model)
+        ref_feat = get_deep_features(ref, self.model)
+        sal_pp = compute_spatial_similarity(probe_feat, ref_feat)[0]
+        gallery = self.gallery[0]
+        if isinstance(gallery, str):
+            gallery = [im for im in utils.image_loader([gallery])][0]
+        gallery_feat = get_deep_features(gallery, self.model)
+        sal_np = compute_spatial_similarity(probe_feat, gallery_feat)[0]
         saliency_map = sal_pp - sal_np
         saliency_map -= saliency_map.min()
-        saliency_map /= saliency_map.max()
+        saliency_map /= (1e-10 + saliency_map.max())
         self.saliency_map = saliency_map
-        
         print_flush('\nFinished!')
 
     def plot_gallery(self):

@@ -29,6 +29,7 @@ from xfr import inpaintgame_saliencymaps_dir
 from xfr.models import blackbox_RISE as bb_RISE
 from xfr.models import blackbox_CorrRISE as bb_CorrRISE
 from xfr.models import blackbox_XFace as bb_XFace
+from xfr.models import blackbox_PairSIM as bb_PairSIM
 from xfr.show import create_save_smap
 import time
 import gc
@@ -114,6 +115,30 @@ def create_bbox_XFace(blackbox_fn, probe_im, mates, nonmates,
         # plotOverlay(strise.probe, strise.saliency_map, fs_filename)
         saliency_map = np.array(xface.saliency_map, copy=True)
         del xface
+        gc.collect()
+        torch.cuda.empty_cache()
+        return saliency_map
+    return bbox
+
+def create_bbox_PairSIM(blackbox_fn, probe_im, mates, nonmates,
+                device
+               ):
+    def bbox():
+        ps = bb_PairSIM.BlackBoxPairSIM(
+            probe=probe_im,
+            refs=mates,
+            gallery=nonmates,
+            black_box_fn=blackbox_fn,
+            device=device
+            )
+
+        # Evaluate black box
+        ps.evaluate()
+
+        # Save saliency map
+        # plotOverlay(strise.probe, strise.saliency_map, fs_filename)
+        saliency_map = np.array(ps.saliency_map, copy=True)
+        del ps
         gc.collect()
         torch.cuda.empty_cache()
         return saliency_map
@@ -267,6 +292,23 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
                     fn,
                     output_dir, overwrite,
                     smap_fn=create_bbox_XFace(
+                        blackbox_fn=bb_score_fn,
+                        probe_im=probe_im,
+                        mates=mates,
+                        nonmates=nonmates,
+                        device=device
+                    ),
+                    probe_im=probe_im,
+                    mask_im=mask_im,
+                    mask_id=mask_id,
+                    probe_info=probe_row
+                )
+            elif method.lower() == 'pairsim':
+                fn = 'bbox-pairsim'
+                create_save_smap(
+                    fn,
+                    output_dir, overwrite,
+                    smap_fn=create_bbox_PairSIM(
                         blackbox_fn=bb_score_fn,
                         probe_im=probe_im,
                         mates=mates,
