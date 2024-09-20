@@ -46,7 +46,8 @@ if __name__ == "__main__":
     # inpainted_files = df.iloc[:, 3]
     selected_ids = ['m2-034', 'f1-013', 'm2-096', 'f1-013', 'm1-020', 'f1-006', 'm2-097', 'm2-039', 'm2-061', 'm2-034']
     selected_masks = ['0', '3', '1', '2', '3', '4', '0', '1', '4', '2']
-    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'gweEBP']
+    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'XFace', 'CorrRISE', 'gweEBP']
+    method_labels = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'bbox-xface', 'bbox-corrrise_perct=10_scale_12', 'gweEBP']
     nr, nc = len(selected_ids), len(method_names) + 4   
     # fig = plt.figure(figsize=(40*nc, 40*nr+40))
     fig, axes = plt.subplots(nr, nc, figsize=(15, 15))
@@ -73,19 +74,19 @@ if __name__ == "__main__":
         axes[i, j].imshow(inpainted_mate)
         format_axes(axes[i, j])
         
-        for method in method_names:
+        for method, label in zip(method_names, method_labels):
             if dataname == 'CUHK':
                 smap = mpimg.imread(os.path.join(smap_path, \
                                                  f'{method}-{netname}', \
                                                 f'{sid}', \
-                                                f'{smask}-{method}-saliency-overlay.png'))
+                                                f'{smask}-{label}-saliency-overlay.png'))
             else:
                 raise NotImplementedError()
             j += 1
             axes[i, j].imshow(smap)
             format_axes(axes[i, j])
       
-    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)']
+    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)', '(l)', '(m)']
     for j in range(nc):
         axes[-1, j].set_xlabel(lbls[j], fontsize=30)
             

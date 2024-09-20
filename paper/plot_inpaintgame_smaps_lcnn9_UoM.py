@@ -46,7 +46,9 @@ if __name__ == "__main__":
     inpainted_files = df.iloc[:, 3]
     selected_ids = ['2', '46', '49', '56', '59', '75', '83', '89', '101', '193']
     selected_masks = ['0', '3', '3', '4', '2', '1', '4', '0', '2', '1']
-    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'gweEBP']
+    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'XFace', 'CorrRISE', 'gweEBP']
+    method_labels = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'bbox-xface', 'bbox-corrrise_perct=10_scale_12', 'gweEBP']
+
     nr, nc = len(selected_ids), len(method_names) + 4   
     # fig = plt.figure(figsize=(40*nc, 40*nr+40))
     fig, axes = plt.subplots(nr, nc, figsize=(15, 15))
@@ -73,19 +75,19 @@ if __name__ == "__main__":
         axes[i, j].imshow(inpainted_mate)
         format_axes(axes[i, j])
         
-        for method in method_names:
+        for method, label in zip(method_names, method_labels):
             if dataname == 'UoM':
                 smap = mpimg.imread(os.path.join(smap_path, \
                                                  f'{method}-{netname}', \
                                                 '{:05d}'.format(int(sid)), \
-                                                f'{smask}-{method}-saliency-overlay.png'))
+                                                f'{smask}-{label}-saliency-overlay.png'))
             else:
                 raise NotImplementedError()
             j += 1
             axes[i, j].imshow(smap)
             format_axes(axes[i, j])
       
-    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)']
+    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)', '(l)', '(m)']
     for j in range(nc):
         axes[-1, j].set_xlabel(lbls[j], fontsize=30)
             

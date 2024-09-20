@@ -50,7 +50,7 @@ if __name__ == "__main__":
     nonmates = nonmate_df.iloc[1::2, 0].tolist()
     random.seed(0)
     selected_rows = random.sample(list(range(len(probes))), k=10)
-    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'gweEBP']
+    method_names = ['GradCAM', 'EBP', 'cEBP', 'tcEBP', 'PairwiseSIM', 'XFace', 'CorrRISE', 'gweEBP']
     nr, nc = len(selected_rows), len(method_names) + 3   
     # # fig = plt.figure(figsize=(40*nc, 40*nr+40))
     fig, axes = plt.subplots(nr, nc, figsize=(15, 15))
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         
         for method in method_names:
             if dataname == 'CUHK':
-                if method == 'GradCAM':
+                if method in ['GradCAM', 'XFace', 'CorrRISE']:
                     smap = mpimg.imread(os.path.join(smap_path, \
                                                   f'{method}', f'{dataname}-{netname}', \
                                                 f'{probe_id}-01-sz1_vis.png'))
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             axes[i, j].imshow(smap)
             format_axes(axes[i, j])
       
-    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)']
+    lbls = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)', '(j)', '(k)', '(l)', '(m)']
     for j in range(nc):
         axes[-1, j].set_xlabel(lbls[j], fontsize=30)
             
