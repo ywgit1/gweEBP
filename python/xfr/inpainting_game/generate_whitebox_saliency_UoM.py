@@ -28,10 +28,10 @@ from xfr import inpaintgame_saliencymaps_dir
 from xfr.show import processSaliency
 from xfr.show import create_save_smap
 
-orig_image_pattern = '{OriginalFile}'
-inpainted_image_pattern = '{InpaintingFile}'
+orig_image_pattern = '../{OriginalFile}'
+inpainted_image_pattern = '../{InpaintingFile}'
 mask_pattern = lambda dict_: \
-    os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
+    '../' + os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
     os.path.splitext(dict_['InpaintingFile'])[1]
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -804,7 +804,8 @@ def generate_wb_smaps(
 
     multiprobe_data_dir = os.path.join(
         inpaintgame_saliencymaps_dir,
-        '{}/{}'.format(
+        '{}-{}/{}'.format(
+	method,
         net_name,
         subject_id))
 

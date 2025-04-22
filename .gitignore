@@ -3,7 +3,7 @@ __pycache__
 .idea
 data/
 demo/
-models/*.pth
+models/
 *.pt
 *.pth
 *.tar
@@ -18,3 +18,4 @@ eval/cache/
 paper/*.pdf
 python/xfr/models/XFace/__pycache__/
 python/xfr/models/XFace/vis_paper/__pychache__/
+*.zip

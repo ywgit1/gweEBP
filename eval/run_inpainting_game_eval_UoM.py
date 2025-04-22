@@ -135,10 +135,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '--net',
         nargs='+', default=[
-            'lcnn9',
+            'UoM-lcnn9',
         ],
         dest='NET',
-        help='network to analyze',
+        help='network to analyze: UoM-lcnn9 or UoM-vgg16',
     )
     parser.add_argument(
         '--cache-dir',

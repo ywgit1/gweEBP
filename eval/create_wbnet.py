@@ -99,7 +99,7 @@ def create_wbnet(net_name, device, ebp_version=None, ebp_subtree_mode=None):
 
         return wb
     
-    elif net_name == 'vgg16':
+    elif net_name == 'UoM-vgg16':
         if ebp_subtree_mode is None:
             ebp_subtree_mode = 'norelu'
         if ebp_version is not None:
@@ -149,7 +149,7 @@ def create_wbnet(net_name, device, ebp_version=None, ebp_subtree_mode=None):
 
         return wb
 
-    elif net_name == 'lcnn9':
+    elif net_name == 'UoM-lcnn9':
         if ebp_subtree_mode is None:
             ebp_subtree_mode = 'affineonly'
         if ebp_version is not None:

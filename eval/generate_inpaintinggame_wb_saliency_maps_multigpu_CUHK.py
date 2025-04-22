@@ -80,23 +80,23 @@ def run_experiment(params, params_export, gpu_queue):
         
         if params['method'][0].lower() == 'clrp':
             from create_wbnet_clrp import create_wbnet
-            wb = create_wbnet(net_name, device=device) 
+            wb = create_wbnet('CUHK-' + net_name, device=device) 
         elif params['method'][0].lower() == 'agf':
             from create_wbnet_agf import create_wbnet
-            wb = create_wbnet(net_name, device=device)
+            wb = create_wbnet('CUHK-' + net_name, device=device)
         elif params['method'][0].lower() == 'rsp':
             from create_wbnet_rsp import create_wbnet
-            wb = create_wbnet(net_name, device=device)
+            wb = create_wbnet('CUHK-' + net_name, device=device)
         elif 'sess' in params['method'][0].lower():
             from create_wbnet_sess import create_wbnet
-            wb = create_wbnet(net_name, device=device)
+            wb = create_wbnet('CUHK-' + net_name, device=device)
         elif 'cam' in params['method'][0].lower() or params['method'][0].lower() == 'fullgrad':
             from create_wbnet_cam import create_wbnet
-            wb = create_wbnet(net_name, device=device)
+            wb = create_wbnet('CUHK-' + net_name, device=device)
         else:
             from create_wbnet import create_wbnet
             wb = create_wbnet(
-                net_name,
+                'CUHK-' + net_name,
                 ebp_version=ebp_version,
                 ebp_subtree_mode=params['INIT_EBP_SUBTREE_MODE'][0],
                 device=device
@@ -306,7 +306,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--method', nargs='*',
-        default=['ablationcam'],
+        default=['gweEBP'],
         type=str,
         help='cEBP: contrastive EBP and truncated cEBP; '\
             'EBP: EBP; '\
@@ -346,8 +346,9 @@ if __name__ == '__main__':
         help='restrict processing to specific masks, zero padded',
     )
     parser.add_argument('--net', nargs='+',
-                        default=['CUHK-vgg16'],
-                        dest='WB_NET')
+                        default=['lcnn9'],
+                        dest='WB_NET',
+                        help='vgg16 or lcnn9')
 
     parser.add_argument(
         '--overwrite',
@@ -371,7 +372,7 @@ if __name__ == '__main__':
     #     dest='merge_layers',
     #     action='store_true',
     #     help='whether to merge the triplet classification layer with the last FC layer')
-
+    parser.set_defaults(debug=True)
     args = parser.parse_args()
     args.gpus = [int(x) for x in args.gpus]
     run_experiments(vars(args))

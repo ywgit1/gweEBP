@@ -28,10 +28,10 @@ from xfr import inpaintgame_CUHK_saliencymaps_dir
 from xfr.show import processSaliency
 from xfr.show import create_save_smap
 
-orig_image_pattern = '{OriginalFile}'
-inpainted_image_pattern = '{InpaintingFile}'
+orig_image_pattern = '../{OriginalFile}'
+inpainted_image_pattern = '../{InpaintingFile}'
 mask_pattern = lambda dict_: \
-    os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
+    "../" + os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
     os.path.splitext(dict_['InpaintingFile'])[1]
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -558,7 +558,7 @@ def run_gradient_weighted_eEBP(wb, im_mates, im_nonmates, probe_im,
         K = 9
         k_mwp = 8
 
-    img_saliency = wb.gradient_weighted_eEBP(
+    img_saliency, A_list = wb.gradient_weighted_eEBP(
         img_probe, avg_x_mate, avg_x_nonmate, k_poschannel=0, k_negchannel=1, K=K, k_mwp=k_mwp)
 
     wb.layerlist.pop(-1)
@@ -780,7 +780,8 @@ def generate_wb_smaps(
 
     multiprobe_data_dir = os.path.join(
         inpaintgame_CUHK_saliencymaps_dir,
-        '{}/{}'.format(
+        '{}-{}/{}'.format(
+	method,
         net_name,
         subject_id))
 

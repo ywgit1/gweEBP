@@ -20,3 +20,4 @@ class GradCAM(BaseCAM):
                         activations,
                         grads):
         return np.mean(grads, axis=(2, 3))
+

@@ -206,14 +206,7 @@ def run_experiments(params):
         'RISE_SCALE',
         'overwrite',
     ]
-    # if params['SUBJECTS'] is None:
-    #     params['SUBJECTS'] = []
-    #     for subj_csv in params['SUBJ_CSV']:
-    #         subj_data = pd.read_csv(subj_csv)
-    #         params['SUBJECTS'].extend((
-    #             subj_data['SUBJECT_ID'].map(str) + '/' +
-    #             subj_data['ORIGINAL_FILE']).values
-    #         )
+
     net_ds = {}
     subjects = set()
     for net_name in params['WB_NET']:

@@ -34,10 +34,10 @@ from xfr.show import create_save_smap
 import time
 import gc
 
-orig_image_pattern = '{OriginalFile}'
-inpainted_image_pattern = '{InpaintingFile}'
+orig_image_pattern = '../{OriginalFile}'
+inpainted_image_pattern = '../{InpaintingFile}'
 mask_pattern = lambda dict_: \
-    os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
+    '../' + os.path.splitext(dict_['InpaintingFile'])[0] + "_mask" + \
     os.path.splitext(dict_['InpaintingFile'])[1]
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -161,7 +161,8 @@ def generate_bb_smaps(bb_score_fn, convert_from_numpy, net_name, img_base, subj_
     # )
     multiprobe_data_dir = os.path.join(
         inpaintgame_saliencymaps_dir,
-        '{}/{}'.format(
+        '{}-{}/{}'.format(
+	method,
         net_name,
         subject_id))
 

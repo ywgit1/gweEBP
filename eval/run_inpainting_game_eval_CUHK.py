@@ -138,7 +138,7 @@ if __name__ == '__main__':
             'CUHK-lcnn9',
         ],
         dest='NET',
-        help='network to analyze',
+        help='network to analyze: CUHK-lcnn9 or CUHK-vgg16',
     )
     parser.add_argument(
         '--cache-dir',
