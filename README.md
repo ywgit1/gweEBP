@@ -10,27 +10,28 @@ In this paper, we proposed a gradient-weighted extended Excitation Back-Propagat
 Tested with Python 3.7, PyTorch 1.9.0
 
 # Networks
-We provide two convolutional neural networks trained for HFR: VGGFace16 and LightCNN-9. The fine-tuned models can be downloaded from [here](https://drive.google.com/file/d/1MvpQtpMRurew60aHzWqUhPRtDzVqpvUG/view?usp=sharing) and should be unzipped as the ./models folder and placed under the base directory.
+We provide two convolutional neural networks fine-tuned for HFR: VGGFace16 and LightCNN-9. The fine-tuned models can be downloaded from [here](https://drive.google.com/file/d/1MvpQtpMRurew60aHzWqUhPRtDzVqpvUG/view?usp=sharing) and should be unzipped as the ./models folder and placed under the root directory of this project.
 
 # Data
-The test data for evaluating visualization/attribution methods can be downloaded [here](https://drive.google.com/file/d/1Gewjuwsn5n3Kt9rLNFpJ_KMC0AXNF2YF/view?usp=sharing). The unzipped folder should be put into the ./data folder.
+The test data for evaluating visualization/attribution methods can be downloaded [here](https://drive.google.com/file/d/1Gewjuwsn5n3Kt9rLNFpJ_KMC0AXNF2YF/view?usp=sharing). Create a sub-folder named "data" and put the unzipped folder "inpainting-game" into this sub-folder.
 
-# Inpainting Game
+# Run Inpainting Game
 
+Firstly, change the work directory to "eval".
 
 ## Generating the saliency maps for the Inpainting Game
 
 To generate saliency maps using whitebox attribution methods:
 
 ```python
-python eval/generate_inpaintinggame_wb_saliency_maps_multigpu_{dataset}.py --net {net} --method {white_box_method}
+python generate_inpaintinggame_wb_saliency_maps_multigpu_{dataset}.py --net {net} --method {white_box_method}
 ```
 
 The dataset can be either 'UoM' or 'CUHK'. The net can be either 'vgg16' or 'lcnn9'. The white_box_method is one of 'EBP', 'cEBP', 'tcEBP', 'gweEBP' and 'gradcam'.
 
 To generate saliency maps using blackbox attribution methods:
 ```python
-python eval/generate_inpaintinggame_bb_saliency_maps_multigpu_{dataset}.py --net {net} --method {black_box_method}
+python generate_inpaintinggame_bb_saliency_maps_multigpu_{dataset}.py --net {net} --method {black_box_method}
 ```
 The dataset can be either 'UoM' or 'CUHK'. The net can be either 'vgg16' or 'lcnn9'. The black_box_method is one of 'CorrRISE', 'XFace' and 'PairSIM'.
 
@@ -39,7 +40,7 @@ The dataset can be either 'UoM' or 'CUHK'. The net can be either 'vgg16' or 'lcn
 Once the saliency maps have been generated for all the attribution methods you want to compare, the inpainting game can be run to compare the performance of these methods as follows:
 
 ```python
-python eval/run_inpainting_game_eval_{dataset}.py --net {dataset}-{net} --output output/inpainting_game/{dataset}-{net} --method {methods_to_compare}
+python run_inpainting_game_eval_{dataset}.py --net {dataset}-{net} --output output/inpainting_game/{dataset}-{net} --method {methods_to_compare}
 ```
 
 The dataset can be either 'UoM' or 'CUHK'. The net can be either 'vgg16' or 'lcnn9'. The methods_to_compare can be one or more of 'EBP', 'cEBP', 'tcEBP', 'gewEBP', 'GradCAM', 'bbox-xface', 'bbox-corrrise_perct=10_scale_12' and 'PairwiseSIM'. The default is to compare all the attribution methods. 
