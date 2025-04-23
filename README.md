@@ -62,5 +62,5 @@ doi = {https://doi.org/10.1016/j.patrec.2025.03.032},
 url = {https://www.sciencedirect.com/science/article/pii/S0167865525001242},
 author = {Yan Wang and Sivapriyaa Kannappan and Fangliang Bai and Stuart Gibson and Christopher Solomon},
 keywords = {Visualization, Evaluation, Metric learning, Embedding networks, Heterogeneous face recognition}
-```
 }
+```
