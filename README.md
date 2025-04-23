@@ -48,3 +48,19 @@ The dataset can be either 'UoM' or 'CUHK'. The net can be either 'vgg16' or 'lcn
 # Acknowledgement
 
 Our implementation is based on the source code from the project "Explanable Face Recognition" (XFR) by J. Williford et al.: J. Williford, B. May and J. Byrne, "Explainable Face Recognition", ECCV 2020. We thank them for the sharing of their excellent work.
+
+# Citation
+```
+@article{WANG2025136,
+title = {Extended excitation backprop with gradient weighting: A general visualization solution for understanding heterogeneous face recognition},
+journal = {Pattern Recognition Letters},
+volume = {192},
+pages = {136-143},
+year = {2025},
+issn = {0167-8655},
+doi = {https://doi.org/10.1016/j.patrec.2025.03.032},
+url = {https://www.sciencedirect.com/science/article/pii/S0167865525001242},
+author = {Yan Wang and Sivapriyaa Kannappan and Fangliang Bai and Stuart Gibson and Christopher Solomon},
+keywords = {Visualization, Evaluation, Metric learning, Embedding networks, Heterogeneous face recognition}
+```
+}
